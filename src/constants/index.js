@@ -1,0 +1,25 @@
+export const CLIENT_STATUS = Object.freeze({
+  ACTIVE: 'ACTIVE',
+  SUSPENDED: 'SUSPENDED',
+});
+
+export const AUTH_BINDING_TYPE = Object.freeze({
+  API_KEY: 'API_KEY',
+});
+
+export const AUDIT_RESOURCE = Object.freeze({
+  CLIENT: 'CLIENT',
+});
+
+export const AUDIT_ACTION = Object.freeze({
+  CLIENT_CREATED: 'CLIENT_CREATED',
+  CLIENT_STATUS_CHANGED: 'CLIENT_STATUS_CHANGED',
+  CLIENT_TIMEZONE_CHANGED: 'CLIENT_TIMEZONE_CHANGED',
+  CLIENT_AUTH_ROTATED: 'CLIENT_AUTH_ROTATED',
+  CLIENT_UPDATED: 'CLIENT_UPDATED',
+});
+
+export const PRINCIPAL_ROLE = Object.freeze({
+  ADMIN: 'ADMIN',
+  TENANT: 'TENANT',
+});
