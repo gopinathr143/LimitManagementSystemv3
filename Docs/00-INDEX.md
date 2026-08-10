@@ -31,7 +31,7 @@ A ticked Definition of Done without recorded evidence does not close a story. An
 
 | Epic | Title | Stories | Points | Complete | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [EPIC-01](epics/EPIC-01-tenancy-foundation.md) | Tenancy Foundation | 4 | 24 | 0 / 4 | `Not Started` |
+| [EPIC-01](epics/EPIC-01-tenancy-foundation.md) | Tenancy Foundation | 4 | 24 | 0 / 4 | `In Review` |
 | [EPIC-02](epics/EPIC-02-configuration-dimensions-and-limits.md) | Configuration, Dimensions and Limits | 6 | 34 | 0 / 6 | `Not Started` |
 | [EPIC-03](epics/EPIC-03-counter-engine.md) | Counter Engine | 7 | 45 | 0 / 7 | `Not Started` |
 | [EPIC-04](epics/EPIC-04-transaction-validation-and-idempotency.md) | Transaction Validation and Idempotency | 6 | 39 | 0 / 6 | `Not Started` |
@@ -92,10 +92,10 @@ These are unresolved inputs from the BRD, not engineering decisions. Each blocks
 
 | Story | Title | Pri | Est | Acceptance cases | Status | Completed on | Verified by |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| [STORY-01-01](stories/STORY-01-01-client-registry-collection-and-admin-crud.md) | Client registry collection and admin CRUD | Must | 5 | UAT 28 | `Not Started` | | |
-| [STORY-01-02](stories/STORY-01-02-client-authentication-and-clientid-derivation.md) | Client authentication and clientId derivation | Must | 8 | UAT 26, UAT 27 | `Not Started` | | |
-| [STORY-01-03](stories/STORY-01-03-tenant-isolation-across-all-data-access.md) | Tenant isolation across all data access | Must | 8 | UAT 23, UAT 24 | `Not Started` | | |
-| [STORY-01-04](stories/STORY-01-04-client-lifecycle-and-fail-closed-gating.md) | Client lifecycle and fail-closed gating | Must | 3 | UAT 26 | `Not Started` | | |
+| [STORY-01-01](stories/STORY-01-01-client-registry-collection-and-admin-crud.md) | Client registry collection and admin CRUD | Must | 5 | UAT 28 | `In Review` | | |
+| [STORY-01-02](stories/STORY-01-02-client-authentication-and-clientid-derivation.md) | Client authentication and clientId derivation | Must | 8 | UAT 26, UAT 27 | `In Review` | | |
+| [STORY-01-03](stories/STORY-01-03-tenant-isolation-across-all-data-access.md) | Tenant isolation across all data access | Must | 8 | UAT 23, UAT 24 | `In Progress` | | |
+| [STORY-01-04](stories/STORY-01-04-client-lifecycle-and-fail-closed-gating.md) | Client lifecycle and fail-closed gating | Must | 3 | UAT 26 | `In Review` | | |
 
 ### EPIC-02 — Configuration, Dimensions and Limits
 

@@ -1,0 +1,38 @@
+{
+  "name": "imps-outward-velocity-limit-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "IMPS Outward Velocity Limit System — multi-tenant, direction-scoped velocity limit gate (BRD v7.0)",
+  "type": "module",
+  "engines": {
+    "node": "24.12.0",
+    "yarn": ">=1.22.0"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "node --test tests/unit/**/*.test.js",
+    "test:watch": "node --test --watch tests/unit/**/*.test.js",
+    "test:integration": "node --test tests/integration/**/*.test.js",
+    "test:all": "yarn test && yarn test:integration",
+    "mongo:up": "docker-compose up -d mongo && node scripts/wait-for-mongo.js",
+    "mongo:down": "docker-compose down -v",
+    "db:init": "node scripts/init-db.js",
+    "migrate": "liquibase --defaultsFile=db/liquibase.properties update",
+    "migrate:status": "liquibase --defaultsFile=db/liquibase.properties status",
+    "lint": "node --check src/**/*.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "helmet": "^7.2.0",
+    "mongodb": "^6.9.0",
+    "pino": "^9.5.0",
+    "pino-http": "^10.3.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7",
+    "supertest": "^7.0.0"
+  }
+}

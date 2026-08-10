@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:mongodb="http://www.liquibase.org/xml/ns/mongodb"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+        http://www.liquibase.org/xml/ns/mongodb
+        http://www.liquibase.org/xml/ns/mongodb/liquibase-mongodb-latest.xsd">
+
+    <!--
+        BRD §2.1.2 — client registry collection. _id IS the clientId so the
+        primary-key index gives tenant lookup for free (§4.2 access pattern:
+        every key leads with clientId). clientId is also stored as a plain
+        field per §4.2's "clientId is also stored as a field" note, to support
+        aggregation/export queries that shouldn't rely on _id shape.
+    -->
+    <changeSet id="001-create-clients-collection" author="imps-velocity">
+        <mongodb:createCollection collectionName="clients">
+            <mongodb:options>
+                {
+                  "validator": {
+                    "$jsonSchema": {
+                      "bsonType": "object",
+                      "required": ["_id", "clientId", "name", "status", "timezone", "authBinding", "createdAt", "updatedAt"],
+                      "properties": {
+                        "_id": { "bsonType": "string", "description": "clientId, stable and unique" },
+                        "clientId": { "bsonType": "string" },
+                        "name": { "bsonType": "string", "minLength": 1 },
+                        "status": { "enum": ["ACTIVE", "SUSPENDED"] },
+                        "timezone": { "bsonType": "string", "description": "IANA timezone name" },
+                        "authBinding": {
+                          "bsonType": "object",
+                          "required": ["type", "apiKeyHash", "fingerprint", "rotatedAt"],
+                          "properties": {
+                            "type": { "enum": ["API_KEY"] },
+                            "apiKeyHash": { "bsonType": "string" },
+                            "fingerprint": { "bsonType": "string" },
+                            "rotatedAt": { "bsonType": "date" }
+                          }
+                        },
+                        "createdBy": { "bsonType": "string" },
+                        "createdAt": { "bsonType": "date" },
+                        "updatedAt": { "bsonType": "date" }
+                      }
+                    }
+                  },
+                  "validationLevel": "strict",
+                  "validationAction": "error"
+                }
+            </mongodb:options>
+        </mongodb:createCollection>
+    </changeSet>
+
+    <changeSet id="002-clients-unique-clientid-idx" author="imps-velocity">
+        <mongodb:createIndex collectionName="clients">
+            <mongodb:keys>{ "clientId": 1 }</mongodb:keys>
+            <mongodb:options>{ "unique": true, "name": "idx_clients_clientId_unique" }</mongodb:options>
+        </mongodb:createIndex>
+    </changeSet>
+
+    <!--
+        Unique per active credential — the lookup path for tenant auth
+        (STORY-01-02). Sparse so a client mid-rotation without a hash never
+        collides on null.
+    -->
+    <changeSet id="003-clients-unique-apikeyhash-idx" author="imps-velocity">
+        <mongodb:createIndex collectionName="clients">
+            <mongodb:keys>{ "authBinding.apiKeyHash": 1 }</mongodb:keys>
+            <mongodb:options>{ "unique": true, "sparse": true, "name": "idx_clients_apiKeyHash_unique" }</mongodb:options>
+        </mongodb:createIndex>
+    </changeSet>
+
+    <changeSet id="004-clients-status-idx" author="imps-velocity">
+        <mongodb:createIndex collectionName="clients">
+            <mongodb:keys>{ "status": 1 }</mongodb:keys>
+            <mongodb:options>{ "name": "idx_clients_status" }</mongodb:options>
+        </mongodb:createIndex>
+    </changeSet>
+
+</databaseChangeLog>
