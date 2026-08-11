@@ -34,7 +34,7 @@ A ticked Definition of Done without recorded evidence does not close a story. An
 | [EPIC-01](epics/EPIC-01-tenancy-foundation.md) | Tenancy Foundation | 4 | 24 | 0 / 4 | `In Review` |
 | [EPIC-02](epics/EPIC-02-configuration-dimensions-and-limits.md) | Configuration, Dimensions and Limits | 6 | 34 | 0 / 6 | `In Review` |
 | [EPIC-03](epics/EPIC-03-counter-engine.md) | Counter Engine | 7 | 45 | 0 / 7 | `In Review` |
-| [EPIC-04](epics/EPIC-04-transaction-validation-and-idempotency.md) | Transaction Validation and Idempotency | 6 | 39 | 0 / 6 | `Not Started` |
+| [EPIC-04](epics/EPIC-04-transaction-validation-and-idempotency.md) | Transaction Validation and Idempotency | 6 | 39 | 0 / 6 | `In Review` |
 | [EPIC-05](epics/EPIC-05-reversal-and-reconciliation.md) | Reversal and Reconciliation | 2 | 16 | 0 / 2 | `Not Started` |
 | [EPIC-06](epics/EPIC-06-operations-resilience-and-compliance.md) | Operations, Resilience and Compliance | 4 | 23 | 0 / 4 | `Not Started` |
 | [EPIC-07](epics/EPIC-07-performance-and-acceptance-certification.md) | Performance and Acceptance Certification | 3 | 18 | 0 / 3 | `Not Started` |
@@ -124,12 +124,12 @@ These are unresolved inputs from the BRD, not engineering decisions. Each blocks
 
 | Story | Title | Pri | Est | Acceptance cases | Status | Completed on | Verified by |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| [STORY-04-01](stories/STORY-04-01-pending-claim-idempotency-mutex.md) | Pending claim idempotency mutex | Must | 8 | UAT 8, UAT 30 | `Not Started` | | |
-| [STORY-04-02](stories/STORY-04-02-stale-pending-claim-reaper.md) | Stale pending claim reaper | Must | 5 | UAT 35 | `Not Started` | | |
-| [STORY-04-03](stories/STORY-04-03-config-driven-validation-waterfall.md) | Config-driven validation waterfall | Must | 8 | UAT 6, UAT 7, UAT 14, UAT 18 | `Not Started` | | |
-| [STORY-04-04](stories/STORY-04-04-compensating-saga-with-correct-retry-classification.md) | Compensating saga with correct retry classification | Must | 8 | UAT 3, UAT 4 | `Not Started` | | |
-| [STORY-04-05](stories/STORY-04-05-audit-record-and-rejection-detail-capture.md) | Audit record and rejection detail capture | Must | 5 | UAT 2 | `Not Started` | | |
-| [STORY-04-06](stories/STORY-04-06-client-timezone-windows-and-clock-skew-control.md) | Client timezone windows and clock skew control | Must | 5 | UAT 40 | `Not Started` | | |
+| [STORY-04-01](stories/STORY-04-01-pending-claim-idempotency-mutex.md) | Pending claim idempotency mutex | Must | 8 | UAT 8, UAT 30 | `In Review` | | |
+| [STORY-04-02](stories/STORY-04-02-stale-pending-claim-reaper.md) | Stale pending claim reaper | Must | 5 | UAT 35 | `In Review` | | |
+| [STORY-04-03](stories/STORY-04-03-config-driven-validation-waterfall.md) | Config-driven validation waterfall | Must | 8 | UAT 6, UAT 7, UAT 14, UAT 18 | `In Review` | | |
+| [STORY-04-04](stories/STORY-04-04-compensating-saga-with-correct-retry-classification.md) | Compensating saga with correct retry classification | Must | 8 | UAT 3, UAT 4 | `In Review` | | |
+| [STORY-04-05](stories/STORY-04-05-audit-record-and-rejection-detail-capture.md) | Audit record and rejection detail capture | Must | 5 | UAT 2 | `In Review` | | |
+| [STORY-04-06](stories/STORY-04-06-client-timezone-windows-and-clock-skew-control.md) | Client timezone windows and clock skew control | Must | 5 | UAT 40 | `In Progress` | | |
 
 ### EPIC-05 — Reversal and Reconciliation
 

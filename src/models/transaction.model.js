@@ -1,0 +1,78 @@
+import { AppError } from '../utils/AppError.js';
+import { KNOWN_TRANSACTION_ATTRIBUTES, TRANSACTION_STATUS } from '../constants/index.js';
+
+export const TRANSACTIONS_COLLECTION = 'transactions';
+
+const TRANSACTION_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+function isNonNegativeInteger(value) {
+  return Number.isInteger(value) && value >= 0;
+}
+
+/**
+ * BRD §3.2 "Request Data: Transaction ID, UCIC, Account Number, Amount,
+ * Channel, MCC, Timestamp." `amount` is validated the same way limit
+ * thresholds are (§2.3.2) — integer paise, no floating point.
+ */
+export function validateTransactionRequest(payload) {
+  const errors = [];
+
+  if (typeof payload?.transactionId !== 'string' || !TRANSACTION_ID_PATTERN.test(payload.transactionId)) {
+    errors.push({ field: 'transactionId', message: 'transactionId is required (1-128 chars, alphanumeric/underscore/hyphen).' });
+  }
+  if (!isNonNegativeInteger(payload?.amount)) {
+    errors.push({ field: 'amount', message: 'amount is required and must be a non-negative integer number of paise (no floating point).' });
+  }
+
+  const attributes = {};
+  for (const attribute of KNOWN_TRANSACTION_ATTRIBUTES) {
+    if (payload?.[attribute] !== undefined) {
+      if (typeof payload[attribute] !== 'string' || payload[attribute] === '') {
+        errors.push({ field: attribute, message: `${attribute} must be a non-empty string when provided.` });
+      } else {
+        attributes[attribute] = payload[attribute];
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    throw AppError.badRequest('Transaction payload failed validation.', 'VALIDATION_ERROR', { errors });
+  }
+
+  return { transactionId: payload.transactionId, amount: payload.amount, attributes };
+}
+
+export function buildClaimDocument({ clientId, transactionId, requestData, now, instanceId }) {
+  return {
+    _id: { clientId, transactionId },
+    clientId,
+    transactionId,
+    status: TRANSACTION_STATUS.PENDING,
+    requestData,
+    claimedAt: now,
+    updatedAt: now,
+    instanceId,
+  };
+}
+
+/**
+ * BRD §2.4 step 3.1 — "Extract that dimension's attribute values. Missing
+ * required attribute → dimension skipped as not applicable." Returns null
+ * (skip) rather than a partial map, so a caller never accidentally
+ * evaluates a dimension against incomplete attribute data.
+ */
+export function extractAttributeMap(dimensionAttributes, requestAttributes) {
+  const map = {};
+  for (const attribute of dimensionAttributes) {
+    const value = requestAttributes?.[attribute];
+    if (value === undefined) {
+      return null;
+    }
+    map[attribute] = value;
+  }
+  return map;
+}
+
+export function attributeMapToOrderedValues(dimensionAttributes, attributeMap) {
+  return dimensionAttributes.map((attribute) => attributeMap[attribute]);
+}

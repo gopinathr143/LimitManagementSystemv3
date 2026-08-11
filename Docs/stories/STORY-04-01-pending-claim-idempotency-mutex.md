@@ -3,7 +3,7 @@
 | Field | Value |
 | :--- | :--- |
 | **Epic** | [EPIC-04 — Transaction Validation and Idempotency](../epics/EPIC-04-transaction-validation-and-idempotency.md) |
-| **Status** | `Not Started` |
+| **Status** | `In Review` |
 | **Priority** | Must |
 | **Estimate (pts)** | 8 |
 | **BRD reference** | Section 3.1 |
@@ -31,13 +31,13 @@ The transaction record is written as a pending claim before any validation or co
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria below pass in a shared (non-local) environment
-- [ ] Unit tests cover every AC branch, including the negative/failure path
-- [ ] Integration test runs against a real MongoDB replica set (not an in-memory mock)
+- [ ] All Acceptance Criteria below pass in a shared (non-local) environment — passing locally against a real MongoDB replica set, stable across 6 repeated runs of the concurrency test; not yet run in a shared/CI environment
+- [x] Unit tests cover every AC branch, including the negative/failure path — `tests/unit/transaction.service.test.js`
+- [x] Integration test runs against a real MongoDB replica set (not an in-memory mock) — `tests/integration/transaction.idempotency.test.js`
 - [ ] Code reviewed and approved by a second engineer
-- [ ] Structured logs and metrics emitted per Section 4.11 of the BRD
-- [ ] BRD section updated if implementation diverged from the written design
-- [ ] The compound client and transaction identifier is the document primary key so the mutex needs no secondary index
+- [ ] Structured logs and metrics emitted per Section 4.11 of the BRD — structured logs are in place (claim/resolve events); decision counters and `409` rate named in §4.11 are not yet wired to a metrics emitter (see EPIC-01/02/03 DoD notes)
+- [x] BRD section updated if implementation diverged from the written design — no divergence; implements §3.1 exactly (claim before validation, compound `_id` mutex, guarded resolve)
+- [x] The compound client and transaction identifier is the document primary key so the mutex needs no secondary index — `_id: {clientId, transactionId}` (`src/models/transaction.model.js`); `TransactionRepository` has no secondary unique index for this purpose
 
 ## How to treat this story as complete
 
@@ -45,10 +45,10 @@ A story is **Done** only when every row below has recorded evidence. A ticked De
 
 | Check | Evidence required | Link / reference | Verified by |
 | :--- | :--- | :--- | :--- |
-| Concurrency test | UAT 30 result proving counters increment exactly once under N concurrent duplicates | | |
-| Sequential idempotency | UAT 8 result for the simple repeat case | | |
-| Cross-client test | Result showing identical identifiers across clients do not cross-resolve | | |
+| Concurrency test | UAT 30 result proving counters increment exactly once under N concurrent duplicates | `tests/integration/transaction.idempotency.test.js` — "AC1/UAT 30: many concurrent identical requests..." (25 concurrent identical requests, counter reflects exactly one), run 6 times consecutively with zero failures | |
+| Sequential idempotency | UAT 8 result for the simple repeat case | `tests/integration/transaction.idempotency.test.js` — "AC2/UAT 8: a sequential repeat..." | |
+| Cross-client test | Result showing identical identifiers across clients do not cross-resolve | `tests/integration/transaction.idempotency.test.js` — "AC4: two different clients using the same transactionId are processed independently" | |
 
 ## Notes / Risks
 
-Corrects a defect present in BRD v3 and v4. The consumer contract gains a new in-progress response, so consumer teams must be notified.
+Corrects a defect present in BRD v3 and v4. The consumer contract gains a new in-progress response (`409 TRANSACTION_IN_PROGRESS`) — implemented as documented; no external consumer teams exist yet to notify (pre-first-deploy).

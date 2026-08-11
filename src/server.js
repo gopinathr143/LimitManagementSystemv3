@@ -15,6 +15,9 @@ async function main() {
   logger.info({ count: warmedClientIds.length }, 'Config cache warmed');
   app.locals.configCache.startPolling();
 
+  // BRD §3.1.1 — the stale-claim reaper, freeing transactionIds orphaned by a crashed instance.
+  app.locals.staleClaimReaperService.start();
+
   const server = app.listen(env.port, () => {
     logger.info({ port: env.port, nodeEnv: env.nodeEnv }, 'IMPS Outward Velocity Limit System listening');
   });
@@ -22,6 +25,7 @@ async function main() {
   const shutdown = async (signal) => {
     logger.info({ signal }, 'Shutting down');
     app.locals.configCache.stopPolling();
+    app.locals.staleClaimReaperService.stop();
     server.close(async () => {
       await closeDatabase();
       process.exit(0);
