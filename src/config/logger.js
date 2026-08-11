@@ -7,12 +7,9 @@ import { env } from './env.js';
  * logger level so a call site forgetting to mask something is still safe.
  */
 const REDACT_PATHS = [
-  'req.headers["x-api-key"]',
-  'req.headers["x-admin-api-key"]',
-  'apiKey',
-  '*.apiKey',
-  'apiKeyHash',
-  '*.apiKeyHash',
+  // No API keys exist today (see resolveClientId.middleware.js), but
+  // 'authorization' is kept ready for when OAuth is onboarded.
+  'req.headers.authorization',
   'ucic',
   '*.ucic',
   'accountNumber',

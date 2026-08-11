@@ -1,7 +1,7 @@
 import express from 'express';
 import { registerGlobalMiddleware } from './middleware/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
-import { createTenantAuth } from './middleware/tenantAuth.middleware.js';
+import { createResolveClientId } from './middleware/resolveClientId.middleware.js';
 import { createApiRouter } from './routes/index.js';
 
 import { ClientRepository } from './repositories/client.repository.js';
@@ -52,12 +52,12 @@ export function createApp(db) {
   const registryController = new RegistryController(registryService);
   const limitDefinitionController = new LimitDefinitionController(limitDefinitionService);
 
-  const tenantAuth = createTenantAuth(clientService);
+  const resolveClientId = createResolveClientId(clientService);
 
   const app = express();
   registerGlobalMiddleware(app);
 
-  app.use('/', createApiRouter({ tenantAuth, clientController, registryController, limitDefinitionController }));
+  app.use('/', createApiRouter({ resolveClientId, clientController, registryController, limitDefinitionController }));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

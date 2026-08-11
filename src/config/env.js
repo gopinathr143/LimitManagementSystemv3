@@ -8,13 +8,6 @@ function requireEnv(name, fallback) {
   return value;
 }
 
-function parseList(value) {
-  return value
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   isProduction: process.env.NODE_ENV === 'production',
@@ -26,9 +19,9 @@ export const env = {
     dbName: requireEnv('MONGO_DB_NAME', 'imps_velocity'),
   },
 
-  auth: {
-    adminApiKeys: parseList(requireEnv('ADMIN_API_KEYS', 'change-me-admin-key')),
-    apiKeyHeader: (process.env.API_KEY_HEADER ?? 'x-api-key').toLowerCase(),
-    adminApiKeyHeader: (process.env.ADMIN_API_KEY_HEADER ?? 'x-admin-api-key').toLowerCase(),
-  },
+  // No authentication on this API — callers are trusted same-cluster
+  // consumers. ACTOR_HEADER is an optional, unverified caller-supplied
+  // identifier recorded on audit trail entries (who made this change);
+  // it is not a credential. Revisit when OAuth+scopes are onboarded.
+  actorHeader: (process.env.ACTOR_HEADER ?? 'x-actor-id').toLowerCase(),
 };

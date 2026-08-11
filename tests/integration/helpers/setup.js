@@ -46,18 +46,16 @@ export async function clearCollections(db) {
   await db.collection('limitsAudit').deleteMany({});
 }
 
-/** EPIC-02 helper: onboard a client via HTTP and return its clientId + apiKey, ready for tenant-authenticated calls. */
+/** EPIC-02 helper: onboard a client via HTTP (no auth) and return its clientId, ready for tenant-scoped calls. */
 export async function createTestClient(app, overrides = {}) {
   const clientId = overrides.clientId ?? `CLIENT_${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
   const res = await request(app)
     .post('/clients')
-    .set(adminHeaders())
     .send({ clientId, name: overrides.name ?? clientId, timezone: overrides.timezone ?? 'Asia/Kolkata' });
-  return { clientId, apiKey: res.body.data.apiKey };
-}
-
-export function adminHeaders() {
-  return { 'x-admin-api-key': env.auth.adminApiKeys[0] };
+  if (res.status !== 201) {
+    throw new Error(`createTestClient: POST /clients failed with ${res.status}: ${JSON.stringify(res.body)}`);
+  }
+  return { clientId };
 }
 
 export { createApp };

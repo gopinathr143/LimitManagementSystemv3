@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { requireOwnClientParam } from '../middleware/tenantAuth.middleware.js';
 
-export const createLimitDefinitionRouter = (tenantAuth, limitDefinitionController) => {
+/** clientId is taken from the path (no authentication — see resolveClientId.middleware.js). */
+export const createLimitDefinitionRouter = (resolveClientId, limitDefinitionController) => {
   const router = Router({ mergeParams: true });
 
-  router.use(tenantAuth, requireOwnClientParam);
+  router.use(resolveClientId);
 
   router.post('/', limitDefinitionController.create);
   router.get('/', limitDefinitionController.list);

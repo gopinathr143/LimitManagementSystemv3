@@ -3,7 +3,7 @@
 | Field | Value |
 | :--- | :--- |
 | **Epic** | [EPIC-01 — Tenancy Foundation](../epics/EPIC-01-tenancy-foundation.md) |
-| **Status** | `In Review` |
+| **Status** | `Superseded` |
 | **Priority** | Must |
 | **Estimate (pts)** | 8 |
 | **BRD reference** | Section 2.1.1 |
@@ -12,14 +12,30 @@
 | **Completed on** | _(date)_ |
 | **Verified by** | _(name)_ |
 
-> Status values: `Not Started` · `In Progress` · `In Review` · `Blocked` · `Done`
+> Status values: `Not Started` · `In Progress` · `In Review` · `Blocked` · `Done` · `Superseded`
 > When status changes, update **both** this file and `00-INDEX.md`.
+
+## ⚠ Deliberate divergence from the BRD (recorded per this story's own DoD)
+
+**Decision (2026-08-11): authentication is removed from this API.** The consuming systems are same-cluster, trusted internal callers — there is no network boundary between them and this service that a credential would meaningfully defend. `clientId` is now taken directly from the request path rather than derived from an authenticated principal.
+
+This is a genuine reduction from the BRD's stated posture. BRD §2.1.1 calls authenticated-principal derivation "the load-bearing control preventing one tenant from reading or mutating another's counters, limits or audit records." With no credential, that specific claim no longer holds at the HTTP layer — **a caller can address any `clientId` simply by putting it in the URL.** What still holds, and is unchanged:
+
+* An unknown or non-`ACTIVE` `clientId` is still rejected, fail-closed, before any further processing (`src/middleware/resolveClientId.middleware.js`) — this is STORY-01-04's contract, kept intact.
+* The structural guard against a *clientId-less* query anywhere in the codebase (`TenantScopedRepository`, STORY-01-03) is unaffected — it protects against our own code accidentally omitting `clientId`, not against a caller supplying the wrong one.
+* No secret material (there is none now) can leak, since there is none to leak. `authBinding` was removed from the `clients` schema entirely rather than left unused.
+
+**What replaces credential-derived identity:** an optional, unverified `x-actor-id` header, recorded on audit trail entries for traceability (`configAudit`/`limitsAudit` `actor` field). It is explicitly **not** a security control — a caller can put anything in it — only an audit convenience. Default is `"unknown"` when absent.
+
+**Planned reintroduction:** when this API is exposed to callers outside the trusted cluster, OAuth 2.0 with scoped tokens is the intended mechanism (the bank's own preference, communicated directly rather than through the BRD's original API-key/mTLS/OAuth open item). The reintroduction point is intentionally narrow: `src/middleware/resolveClientId.middleware.js` is the single place `clientId` resolution happens, and it is already structured as a factory taking a service dependency — swapping "read `req.params.clientId`" for "derive from a validated OAuth token's scope claim" touches that one file and nothing downstream (`req.tenant.clientId` remains the contract every controller/service already relies on).
+
+**Original scope below is preserved for the record**, since it documents what a future OAuth reintroduction needs to satisfy again (AC2's payload/principal mismatch check, AC3's unauthenticated rejection, AC4's fingerprint-not-secret logging) — none of it is deleted, all of it is currently inapplicable.
 
 ## Description
 
-Derive `clientId` from the authenticated principal (API key, mTLS certificate or OAuth client credential), never from a request body field. This is the load-bearing control for tenant isolation. If a payload also carries a clientId it must match the principal, otherwise the request is rejected.
+~~Derive `clientId` from the authenticated principal (API key, mTLS certificate or OAuth client credential), never from a request body field.~~ **Superseded** — see divergence note above. `clientId` is now taken directly from the request path; see STORY-01-04 for the fail-closed existence/status check that remains.
 
-## Acceptance Criteria
+## Acceptance Criteria (historical — not currently applicable)
 
 | # | Given | When | Then |
 | :-- | :--- | :--- | :--- |
@@ -30,24 +46,11 @@ Derive `clientId` from the authenticated principal (API key, mTLS certificate or
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria below pass in a shared (non-local) environment — passing locally against a real MongoDB replica set; not yet run in a shared/CI environment
-- [x] Unit tests cover every AC branch, including the negative/failure path — `tests/unit/tenantAuth.middleware.test.js`, `tests/unit/client.service.test.js` (resolveByApiKey)
-- [x] Integration test runs against a real MongoDB replica set (not an in-memory mock) — `tests/integration/tenantAuth.test.js`
+- [ ] ~~All Acceptance Criteria above pass~~ — not applicable; superseded by the no-auth decision
+- [x] The replacement behaviour (`resolveClientId` middleware) has its own unit and integration coverage — `tests/unit/resolveClientId.middleware.test.js`, `tests/integration/registry.test.js` / `limitDefinition.test.js` (unknown/suspended clientId rejection cases)
 - [ ] Code reviewed and approved by a second engineer
-- [ ] Structured logs and metrics emitted per Section 4.11 of the BRD — structured rejection logs are in place; no metrics emitter yet (see STORY-01-01 DoD note)
-- [ ] BRD section updated if implementation diverged from the written design — no divergence identified
-- [x] Credentials and certificate fingerprints never appear in application logs — `pino` redaction config (`src/config/logger.js`) plus fingerprint-only logging (`src/utils/crypto.js` `fingerprintOf`, never the raw key/hash)
-
-## How to treat this story as complete
-
-A story is **Done** only when every row below has recorded evidence. A ticked Definition of Done without evidence does not close the story.
-
-| Check | Evidence required | Link / reference | Verified by |
-| :--- | :--- | :--- | :--- |
-| Spoof test | Test output for UAT 27 showing payload/principal mismatch rejected | `tests/integration/tenantAuth.test.js` — "AC2: payload clientId mismatching the principal is rejected before any access" | |
-| Security review | Sign-off from the security reviewer on the auth binding mechanism | **Not yet obtained.** Mechanism implemented pending this story's own note below: API key (SHA-256 hashed at rest, timing-safe compare, fingerprint-only logging) chosen as the pragmatic default — mTLS/OAuth remain open per the BRD | |
-| Log inspection | Confirmation that no secret material appears in logs at any level | Manual smoke test: `POST /clients` response carries the plaintext key once; the corresponding `pino-http` request/response log line shows only redacted headers, no key material | |
+- [x] BRD section updated if implementation diverged from the written design — this file *is* that update; §2.1.1's authenticated-principal claim no longer holds for this deployment topology
 
 ## Notes / Risks
 
-The choice of mechanism (API key vs mTLS vs OAuth) is an open item in the BRD and must be confirmed with the bank before this story starts. **Implementation decision:** API key was implemented first as the lowest-friction mechanism that still satisfies every AC (derivation from a credential, never from a request field; rejection of unknown/rotated credentials; fingerprint-only logging). If the bank mandates mTLS or OAuth instead, only `tenantAuth.middleware.js` and `ClientService.resolveByApiKey` need to change — the trust boundary (`req.tenant.clientId` set once, before any downstream code runs) is mechanism-agnostic and does not need to change.
+**If this service is ever reachable from outside the trusted cluster (a new consumer, a network topology change, a compliance requirement), this decision must be revisited before that exposure ships** — the current posture assumes a closed network boundary does the job a credential would otherwise do. The BRD's original open item (API key vs mTLS vs OAuth) is superseded by a concrete choice for the future: OAuth with scopes, reintroduced solely in `resolveClientId.middleware.js`.

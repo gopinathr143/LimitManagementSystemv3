@@ -22,10 +22,9 @@ describe('Config cache wiring — STORY-02-06 (integration, real MongoDB replica
   });
 
   test('AC2: a limit definition created over HTTP is reflected in the cache with no restart and no explicit poll', async () => {
-    const { clientId, apiKey } = await createTestClient(app);
+    const { clientId } = await createTestClient(app);
     await request(app)
       .put(`/clients/${clientId}/dimensions`)
-      .set('x-api-key', apiKey)
       .send({ allowedDimensions: [{ code: 'GLOBAL', attributes: [], windows: ['DAILY_CALENDAR'] }] });
 
     const afterRegistryWrite = app.locals.configCache.get(clientId);
@@ -34,7 +33,6 @@ describe('Config cache wiring — STORY-02-06 (integration, real MongoDB replica
 
     await request(app)
       .post(`/clients/${clientId}/limits`)
-      .set('x-api-key', apiKey)
       .send({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 1000 });
 
     const cached = app.locals.configCache.get(clientId);
@@ -44,21 +42,18 @@ describe('Config cache wiring — STORY-02-06 (integration, real MongoDB replica
   });
 
   test('AC2: an update pushes a fresh snapshot reflecting the new value, replacing the old one wholesale', async () => {
-    const { clientId, apiKey } = await createTestClient(app);
+    const { clientId } = await createTestClient(app);
     await request(app)
       .put(`/clients/${clientId}/dimensions`)
-      .set('x-api-key', apiKey)
       .send({ allowedDimensions: [{ code: 'GLOBAL', attributes: [], windows: ['DAILY_CALENDAR'] }] });
     const createRes = await request(app)
       .post(`/clients/${clientId}/limits`)
-      .set('x-api-key', apiKey)
       .send({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 1000 });
 
     const firstEntry = app.locals.configCache.get(clientId);
 
     await request(app)
       .put(`/clients/${clientId}/limits/${createRes.body.data._id}`)
-      .set('x-api-key', apiKey)
       .send({ thresholdAmount: 7777 });
 
     const secondEntry = app.locals.configCache.get(clientId);
@@ -71,11 +66,9 @@ describe('Config cache wiring — STORY-02-06 (integration, real MongoDB replica
     const clientB = await createTestClient(app);
     await request(app)
       .put(`/clients/${clientA.clientId}/dimensions`)
-      .set('x-api-key', clientA.apiKey)
       .send({ allowedDimensions: [{ code: 'GLOBAL', attributes: [], windows: ['DAILY_CALENDAR'] }] });
     await request(app)
       .put(`/clients/${clientB.clientId}/dimensions`)
-      .set('x-api-key', clientB.apiKey)
       .send({ allowedDimensions: [{ code: 'GLOBAL', attributes: [], windows: ['MONTHLY'] }] });
 
     const cachedA = app.locals.configCache.get(clientA.clientId);
@@ -88,7 +81,6 @@ describe('Config cache wiring — STORY-02-06 (integration, real MongoDB replica
     const clientA = await createTestClient(app);
     await request(app)
       .put(`/clients/${clientA.clientId}/dimensions`)
-      .set('x-api-key', clientA.apiKey)
       .send({ allowedDimensions: [{ code: 'GLOBAL', attributes: [], windows: ['DAILY_CALENDAR'] }] });
 
     const freshApp = createApp(db);

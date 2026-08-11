@@ -14,8 +14,7 @@ export class RegistryController {
 
   replace = async (req, res, next) => {
     try {
-      const actor = req.principal?.fingerprint ?? 'unknown';
-      const doc = await this.registryService.replaceRegistry(req.tenant.clientId, req.body?.allowedDimensions, actor);
+      const doc = await this.registryService.replaceRegistry(req.tenant.clientId, req.body?.allowedDimensions, req.actor);
       res.status(200).json({ success: true, data: this.registryService.toView(doc) });
     } catch (error) {
       next(error);

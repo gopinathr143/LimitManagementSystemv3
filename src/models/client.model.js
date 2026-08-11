@@ -34,13 +34,8 @@ export function validateClientUpdatePayload(payload) {
   if (payload.timezone !== undefined && !isValidIanaTimezone(payload.timezone)) {
     errors.push({ field: 'timezone', message: `timezone must be a valid IANA timezone name, got: ${payload.timezone}` });
   }
-  if (
-    payload.status === undefined &&
-    payload.timezone === undefined &&
-    payload.rotateAuth !== true &&
-    payload.name === undefined
-  ) {
-    errors.push({ field: '_', message: 'At least one of status, timezone, name or rotateAuth must be provided.' });
+  if (payload.status === undefined && payload.timezone === undefined && payload.name === undefined) {
+    errors.push({ field: '_', message: 'At least one of status, timezone or name must be provided.' });
   }
   if (payload.name !== undefined && (typeof payload.name !== 'string' || payload.name.trim() === '')) {
     errors.push({ field: 'name', message: 'name must be a non-empty string.' });
@@ -51,30 +46,15 @@ export function validateClientUpdatePayload(payload) {
   }
 }
 
-export function buildClientDocument({ clientId, name, timezone, authBinding, createdBy, now }) {
+export function buildClientDocument({ clientId, name, timezone, createdBy, now }) {
   return {
     _id: clientId,
     clientId,
     name,
     status: CLIENT_STATUS.ACTIVE,
     timezone,
-    authBinding,
     createdBy,
     createdAt: now,
     updatedAt: now,
-  };
-}
-
-/** Never let authBinding.apiKeyHash (or any secret material) leave the service boundary in an API response. */
-export function sanitizeClient(clientDoc) {
-  if (!clientDoc) {
-    return clientDoc;
-  }
-  const { authBinding, ...rest } = clientDoc;
-  return {
-    ...rest,
-    authBinding: authBinding
-      ? { type: authBinding.type, fingerprint: authBinding.fingerprint, rotatedAt: authBinding.rotatedAt }
-      : undefined,
   };
 }

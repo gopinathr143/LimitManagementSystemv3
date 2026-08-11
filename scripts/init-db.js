@@ -14,23 +14,13 @@ import { env } from '../src/config/env.js';
 const clientsValidator = {
   $jsonSchema: {
     bsonType: 'object',
-    required: ['_id', 'clientId', 'name', 'status', 'timezone', 'authBinding', 'createdAt', 'updatedAt'],
+    required: ['_id', 'clientId', 'name', 'status', 'timezone', 'createdAt', 'updatedAt'],
     properties: {
       _id: { bsonType: 'string' },
       clientId: { bsonType: 'string' },
       name: { bsonType: 'string', minLength: 1 },
       status: { enum: ['ACTIVE', 'SUSPENDED'] },
       timezone: { bsonType: 'string' },
-      authBinding: {
-        bsonType: 'object',
-        required: ['type', 'apiKeyHash', 'fingerprint', 'rotatedAt'],
-        properties: {
-          type: { enum: ['API_KEY'] },
-          apiKeyHash: { bsonType: 'string' },
-          fingerprint: { bsonType: 'string' },
-          rotatedAt: { bsonType: 'date' },
-        },
-      },
       createdBy: { bsonType: 'string' },
       createdAt: { bsonType: 'date' },
       updatedAt: { bsonType: 'date' },
@@ -127,10 +117,6 @@ export async function initDb(client, dbName = env.mongo.dbName) {
 
   await ensureCollection(db, 'clients', clientsValidator);
   await db.collection('clients').createIndex({ clientId: 1 }, { unique: true, name: 'idx_clients_clientId_unique' });
-  await db.collection('clients').createIndex(
-    { 'authBinding.apiKeyHash': 1 },
-    { unique: true, sparse: true, name: 'idx_clients_apiKeyHash_unique' },
-  );
   await db.collection('clients').createIndex({ status: 1 }, { name: 'idx_clients_status' });
 
   await ensureCollection(db, 'configAudit', configAuditValidator);

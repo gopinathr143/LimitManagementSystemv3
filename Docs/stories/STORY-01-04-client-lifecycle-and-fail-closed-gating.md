@@ -19,6 +19,8 @@
 
 Reject traffic from unknown, inactive or suspended clients before any validation or counter access. This is the first fail-closed gate in the request path and must be unconditional.
 
+> **Note (2026-08-11):** per [STORY-01-02](STORY-01-02-client-authentication-and-clientid-derivation.md), authentication was removed from this API (same-cluster trusted callers). This story's gate is **unaffected and unchanged in substance** — it never depended on authentication, only on `clientId` (however obtained) resolving to a known, `ACTIVE` client. It is now implemented in `src/middleware/resolveClientId.middleware.js` rather than the former `tenantAuth.middleware.js`, and it is now the *only* gate in the request path (there is no credential check above it), which makes it more load-bearing than before, not less.
+
 ## Acceptance Criteria
 
 | # | Given | When | Then |
@@ -31,11 +33,11 @@ Reject traffic from unknown, inactive or suspended clients before any validation
 ## Definition of Done
 
 - [ ] All Acceptance Criteria below pass in a shared (non-local) environment — passing locally against a real MongoDB replica set; not yet run in a shared/CI environment
-- [x] Unit tests cover every AC branch, including the negative/failure path — `tests/unit/tenantAuth.middleware.test.js`
-- [x] Integration test runs against a real MongoDB replica set (not an in-memory mock) — `tests/integration/tenantAuth.test.js`
+- [x] Unit tests cover every AC branch, including the negative/failure path — `tests/unit/resolveClientId.middleware.test.js`
+- [x] Integration test runs against a real MongoDB replica set (not an in-memory mock) — `tests/integration/registry.test.js`, `tests/integration/limitDefinition.test.js`
 - [ ] Code reviewed and approved by a second engineer
 - [ ] Structured logs and metrics emitted per Section 4.11 of the BRD — structured rejection logs are in place; no metrics emitter yet (see STORY-01-01 DoD note)
-- [ ] BRD section updated if implementation diverged from the written design — no divergence identified
+- [x] BRD section updated if implementation diverged from the written design — see note above and STORY-01-02 (the gate itself is unchanged; only its position in the middleware chain moved)
 
 ## How to treat this story as complete
 
@@ -43,9 +45,9 @@ A story is **Done** only when every row below has recorded evidence. A ticked De
 
 | Check | Evidence required | Link / reference | Verified by |
 | :--- | :--- | :--- | :--- |
-| Fail-closed test | UAT 26 result covering unknown and suspended clients | `tests/integration/tenantAuth.test.js` — "STORY-01-04 AC1" (unregistered), "AC2" (SUSPENDED), "AC3" (status change picked up without restart), "AC4" (reactivation) | |
-| No side-effect proof | Counter documents unchanged after rejected requests, shown by before/after query | No counter engine exists yet (EPIC-03); the applicable proof today is that a rejected `tenantAuth` request never reaches a route handler at all (`next(AppError)` short-circuits before `req.tenant` is even set) — see the same test file | |
+| Fail-closed test | UAT 26 result covering unknown and suspended clients | `tests/unit/resolveClientId.middleware.test.js` (unknown → 404, SUSPENDED → 403); `tests/integration/registry.test.js` — "STORY-01-04: an unknown clientId is rejected..." / "...a SUSPENDED client is rejected"; `tests/integration/limitDefinition.test.js` — "STORY-01-04: an unregistered clientId is rejected before any limits access" | |
+| No side-effect proof | Counter documents unchanged after rejected requests, shown by before/after query | No counter engine exists yet (EPIC-03); the applicable proof today is that a rejected `resolveClientId` request never reaches a route handler at all (`next(AppError)` short-circuits before `req.tenant` is even set) — see the same test files | |
 
 ## Notes / Risks
 
-There is currently no business route downstream of `tenantAuth` (limits/counters land in EPIC-02/EPIC-03), so this story's middleware is proven via a dedicated probe route (`tests/integration/helpers/tenantTestApp.js`) using the exact production `tenantAuth` + `requireOwnClientParam` chain. It will be re-exercised, not re-implemented, once real tenant routes exist.
+Real tenant business routes now exist (`/clients/:clientId/dimensions`, `/clients/:clientId/limits` from EPIC-02), so this gate is exercised directly through them rather than through a standalone probe route.

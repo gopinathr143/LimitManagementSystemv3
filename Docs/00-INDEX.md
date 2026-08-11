@@ -10,7 +10,7 @@
 
 Each story is a self-contained file holding its description, acceptance criteria in Given / When / Then form, a Definition of Done, and a completion-evidence table.
 
-**Status values:** `Not Started` · `In Progress` · `In Review` · `Blocked` · `Done`
+**Status values:** `Not Started` · `In Progress` · `In Review` · `Blocked` · `Done` · `Superseded` (scope replaced by a recorded, deliberate decision — see the story file)
 
 **Updating status — two places, always:**
 1. The `Status` field in the story file, plus `Completed on` and `Verified by` when it closes.
@@ -75,7 +75,7 @@ These are unresolved inputs from the BRD, not engineering decisions. Each blocks
 
 | Open item | Blocks | Owner |
 | :--- | :--- | :--- |
-| Client authentication mechanism (API key, mTLS or OAuth) | STORY-01-02 | Security |
+| ~~Client authentication mechanism (API key, mTLS or OAuth)~~ — resolved 2026-08-11: no authentication (same-cluster trust); OAuth+scopes planned if ever exposed externally | STORY-01-02 | Security |
 | Statutory record retention term | STORY-06-01 | Compliance |
 | Field-level encryption decision for customer and account identifiers | STORY-06-04 | Compliance and Security |
 | Recovery time and recovery point objectives, and DR topology | STORY-06-03 | Infrastructure |
@@ -93,7 +93,7 @@ These are unresolved inputs from the BRD, not engineering decisions. Each blocks
 | Story | Title | Pri | Est | Acceptance cases | Status | Completed on | Verified by |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | [STORY-01-01](stories/STORY-01-01-client-registry-collection-and-admin-crud.md) | Client registry collection and admin CRUD | Must | 5 | UAT 28 | `In Review` | | |
-| [STORY-01-02](stories/STORY-01-02-client-authentication-and-clientid-derivation.md) | Client authentication and clientId derivation | Must | 8 | UAT 26, UAT 27 | `In Review` | | |
+| [STORY-01-02](stories/STORY-01-02-client-authentication-and-clientid-derivation.md) | Client authentication and clientId derivation | Must | 8 | UAT 26, UAT 27 | `Superseded` | | |
 | [STORY-01-03](stories/STORY-01-03-tenant-isolation-across-all-data-access.md) | Tenant isolation across all data access | Must | 8 | UAT 23, UAT 24 | `In Progress` | | |
 | [STORY-01-04](stories/STORY-01-04-client-lifecycle-and-fail-closed-gating.md) | Client lifecycle and fail-closed gating | Must | 3 | UAT 26 | `In Review` | | |
 

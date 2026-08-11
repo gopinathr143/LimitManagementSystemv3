@@ -14,8 +14,7 @@ export class LimitDefinitionController {
 
   create = async (req, res, next) => {
     try {
-      const actor = req.principal?.fingerprint ?? 'unknown';
-      const result = await this.limitDefinitionService.createDefinition(req.tenant.clientId, req.body, actor);
+      const result = await this.limitDefinitionService.createDefinition(req.tenant.clientId, req.body, req.actor);
       const { data, warnings } = toResponsePayload(result);
       res.status(201).json({ success: true, data, warnings });
     } catch (error) {
@@ -44,8 +43,7 @@ export class LimitDefinitionController {
 
   update = async (req, res, next) => {
     try {
-      const actor = req.principal?.fingerprint ?? 'unknown';
-      const result = await this.limitDefinitionService.updateDefinition(req.tenant.clientId, req.params.id, req.body, actor);
+      const result = await this.limitDefinitionService.updateDefinition(req.tenant.clientId, req.params.id, req.body, req.actor);
       const { data, warnings } = toResponsePayload(result);
       res.status(200).json({ success: true, data, warnings });
     } catch (error) {
@@ -55,8 +53,7 @@ export class LimitDefinitionController {
 
   deactivate = async (req, res, next) => {
     try {
-      const actor = req.principal?.fingerprint ?? 'unknown';
-      const result = await this.limitDefinitionService.deactivateDefinition(req.tenant.clientId, req.params.id, actor);
+      const result = await this.limitDefinitionService.deactivateDefinition(req.tenant.clientId, req.params.id, req.actor);
       res.status(200).json({ success: true, data: toResponsePayload(result).data });
     } catch (error) {
       next(error);

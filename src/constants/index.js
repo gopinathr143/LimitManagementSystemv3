@@ -3,10 +3,6 @@ export const CLIENT_STATUS = Object.freeze({
   SUSPENDED: 'SUSPENDED',
 });
 
-export const AUTH_BINDING_TYPE = Object.freeze({
-  API_KEY: 'API_KEY',
-});
-
 export const AUDIT_RESOURCE = Object.freeze({
   CLIENT: 'CLIENT',
   REGISTRY: 'REGISTRY',
@@ -17,7 +13,6 @@ export const AUDIT_ACTION = Object.freeze({
   CLIENT_CREATED: 'CLIENT_CREATED',
   CLIENT_STATUS_CHANGED: 'CLIENT_STATUS_CHANGED',
   CLIENT_TIMEZONE_CHANGED: 'CLIENT_TIMEZONE_CHANGED',
-  CLIENT_AUTH_ROTATED: 'CLIENT_AUTH_ROTATED',
   CLIENT_UPDATED: 'CLIENT_UPDATED',
   REGISTRY_CREATED: 'REGISTRY_CREATED',
   REGISTRY_UPDATED: 'REGISTRY_UPDATED',
@@ -28,11 +23,6 @@ export const AUDIT_ACTION = Object.freeze({
 
 /** BRD §2.2 — every enabled client must carry this dimension with a mandatory Per-Transaction limit (§5). */
 export const GLOBAL_DIMENSION_CODE = 'GLOBAL';
-
-export const PRINCIPAL_ROLE = Object.freeze({
-  ADMIN: 'ADMIN',
-  TENANT: 'TENANT',
-});
 
 /** BRD §2.3 — the three windows a dimension can *declare* in its registry (§4.3.1). PER_TXN is implicit and never declared (§2.3 "Per-Transaction is never gated"). */
 export const WINDOW_TYPE = Object.freeze({

@@ -1,9 +1,7 @@
 /**
  * Deliberately does NOT extend TenantScopedRepository: the `clients`
  * collection is the tenant directory itself — its documents ARE the
- * clientIds being governed, not data owned by one. Admin-only by contract
- * (enforced at the route layer via adminAuth), and the apiKeyHash lookup is
- * the one legitimate place a query establishes clientId rather than assumes it.
+ * clientIds being governed, not data owned by one.
  */
 export class ClientRepository {
   constructor(collection) {
@@ -16,10 +14,6 @@ export class ClientRepository {
 
   async findByClientId(clientId) {
     return this.collection.findOne({ _id: clientId });
-  }
-
-  async findByApiKeyHash(apiKeyHash) {
-    return this.collection.findOne({ 'authBinding.apiKeyHash': apiKeyHash });
   }
 
   async list({ limit = 50, skip = 0 } = {}) {

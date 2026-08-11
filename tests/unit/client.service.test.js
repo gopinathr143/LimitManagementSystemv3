@@ -23,10 +23,6 @@ class FakeClientRepository {
     return this.byId.get(clientId) ?? null;
   }
 
-  async findByApiKeyHash(apiKeyHash) {
-    return [...this.byId.values()].find((c) => c.authBinding.apiKeyHash === apiKeyHash) ?? null;
-  }
-
   async list() {
     return [...this.byId.values()];
   }
@@ -60,25 +56,21 @@ function buildService() {
 describe('ClientService.createClient — STORY-01-01 AC1/AC2', () => {
   test('AC1: persists client ACTIVE with unique clientId and audit fields', async () => {
     const { service, configAuditRepository } = buildService();
-    const { client, apiKey } = await service.createClient(
-      { clientId: 'CLIENT_A', name: 'Client A', timezone: 'Asia/Kolkata' },
-      'admin-fp-1',
-    );
+    const { client } = await service.createClient({ clientId: 'CLIENT_A', name: 'Client A', timezone: 'Asia/Kolkata' }, 'actor-1');
 
     assert.equal(client.status, CLIENT_STATUS.ACTIVE);
     assert.equal(client.clientId, 'CLIENT_A');
     assert.ok(client.createdAt);
-    assert.ok(client.createdBy === 'admin-fp-1');
-    assert.ok(apiKey.length > 0);
+    assert.equal(client.createdBy, 'actor-1');
     assert.equal(configAuditRepository.entries[0].action, AUDIT_ACTION.CLIENT_CREATED);
   });
 
   test('AC2: a duplicate clientId is rejected with a conflict and no second record', async () => {
     const { service, clientRepository } = buildService();
-    await service.createClient({ clientId: 'CLIENT_A', name: 'Client A', timezone: 'UTC' }, 'admin');
+    await service.createClient({ clientId: 'CLIENT_A', name: 'Client A', timezone: 'UTC' }, 'actor');
 
     await assert.rejects(
-      () => service.createClient({ clientId: 'CLIENT_A', name: 'Client A dup', timezone: 'UTC' }, 'admin'),
+      () => service.createClient({ clientId: 'CLIENT_A', name: 'Client A dup', timezone: 'UTC' }, 'actor'),
       (err) => err instanceof AppError && err.statusCode === 409,
     );
 
@@ -92,7 +84,7 @@ describe('ClientService.createClient — STORY-01-01 AC1/AC2', () => {
     // own insert() collide.
     clientRepository.byId.set('CLIENT_RACE', { _id: 'CLIENT_RACE' });
     await assert.rejects(
-      () => service.createClient({ clientId: 'CLIENT_RACE', name: 'X', timezone: 'UTC' }, 'admin'),
+      () => service.createClient({ clientId: 'CLIENT_RACE', name: 'X', timezone: 'UTC' }, 'actor'),
       (err) => err instanceof AppError && err.statusCode === 409,
     );
   });
@@ -101,14 +93,14 @@ describe('ClientService.createClient — STORY-01-01 AC1/AC2', () => {
 describe('ClientService.updateClient — STORY-01-01 AC5, STORY-01-04', () => {
   test('AC5: status change to SUSPENDED is persisted and audited with actor/timestamp', async () => {
     const { service, configAuditRepository } = buildService();
-    await service.createClient({ clientId: 'CLIENT_A', name: 'Client A', timezone: 'UTC' }, 'admin-1');
+    await service.createClient({ clientId: 'CLIENT_A', name: 'Client A', timezone: 'UTC' }, 'actor-1');
 
-    const { client } = await service.updateClient('CLIENT_A', { status: 'SUSPENDED' }, 'admin-2');
+    const { client } = await service.updateClient('CLIENT_A', { status: 'SUSPENDED' }, 'actor-2');
 
     assert.equal(client.status, 'SUSPENDED');
     const auditEntry = configAuditRepository.entries.at(-1);
     assert.equal(auditEntry.action, AUDIT_ACTION.CLIENT_STATUS_CHANGED);
-    assert.equal(auditEntry.actor, 'admin-2');
+    assert.equal(auditEntry.actor, 'actor-2');
     assert.ok(auditEntry.occurredAt);
     assert.equal(auditEntry.before.status, 'ACTIVE');
     assert.equal(auditEntry.after.status, 'SUSPENDED');
@@ -117,42 +109,16 @@ describe('ClientService.updateClient — STORY-01-01 AC5, STORY-01-04', () => {
   test('updating an unknown client throws 404', async () => {
     const { service } = buildService();
     await assert.rejects(
-      () => service.updateClient('DOES_NOT_EXIST', { status: 'SUSPENDED' }, 'admin'),
+      () => service.updateClient('DOES_NOT_EXIST', { status: 'SUSPENDED' }, 'actor'),
       (err) => err instanceof AppError && err.statusCode === 404,
     );
   });
 
   test('reactivating a suspended client works and is audited', async () => {
     const { service } = buildService();
-    await service.createClient({ clientId: 'CLIENT_A', name: 'Client A', timezone: 'UTC' }, 'admin');
-    await service.updateClient('CLIENT_A', { status: 'SUSPENDED' }, 'admin');
-    const { client } = await service.updateClient('CLIENT_A', { status: 'ACTIVE' }, 'admin');
+    await service.createClient({ clientId: 'CLIENT_A', name: 'Client A', timezone: 'UTC' }, 'actor');
+    await service.updateClient('CLIENT_A', { status: 'SUSPENDED' }, 'actor');
+    const { client } = await service.updateClient('CLIENT_A', { status: 'ACTIVE' }, 'actor');
     assert.equal(client.status, 'ACTIVE');
-  });
-});
-
-describe('ClientService.resolveByApiKey — STORY-01-02', () => {
-  test('resolves the clientId for a valid credential', async () => {
-    const { service } = buildService();
-    const { apiKey } = await service.createClient({ clientId: 'CLIENT_A', name: 'A', timezone: 'UTC' }, 'admin');
-
-    const { client } = await service.resolveByApiKey(apiKey);
-    assert.equal(client.clientId, 'CLIENT_A');
-  });
-
-  test('returns null client for an unrecognised credential (never throws)', async () => {
-    const { service } = buildService();
-    const { client, fingerprint } = await service.resolveByApiKey('totally-unknown-key');
-    assert.equal(client, null);
-    assert.ok(fingerprint);
-  });
-
-  test('a rotated credential no longer resolves the old key', async () => {
-    const { service } = buildService();
-    const { apiKey: oldKey } = await service.createClient({ clientId: 'CLIENT_A', name: 'A', timezone: 'UTC' }, 'admin');
-    await service.updateClient('CLIENT_A', { rotateAuth: true }, 'admin');
-
-    const { client } = await service.resolveByApiKey(oldKey);
-    assert.equal(client, null);
   });
 });

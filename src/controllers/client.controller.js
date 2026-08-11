@@ -5,9 +5,8 @@ export class ClientController {
 
   create = async (req, res, next) => {
     try {
-      const actor = req.principal?.fingerprint ?? 'unknown-admin';
-      const { client, apiKey } = await this.clientService.createClient(req.body, actor);
-      res.status(201).json({ success: true, data: { client, apiKey } });
+      const { client } = await this.clientService.createClient(req.body, req.actor);
+      res.status(201).json({ success: true, data: { client } });
     } catch (error) {
       next(error);
     }
@@ -35,8 +34,7 @@ export class ClientController {
 
   update = async (req, res, next) => {
     try {
-      const actor = req.principal?.fingerprint ?? 'unknown-admin';
-      const result = await this.clientService.updateClient(req.params.clientId, req.body, actor);
+      const result = await this.clientService.updateClient(req.params.clientId, req.body, req.actor);
       res.status(200).json({ success: true, data: result });
     } catch (error) {
       next(error);
