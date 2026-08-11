@@ -33,7 +33,7 @@ A ticked Definition of Done without recorded evidence does not close a story. An
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | [EPIC-01](epics/EPIC-01-tenancy-foundation.md) | Tenancy Foundation | 4 | 24 | 0 / 4 | `In Review` |
 | [EPIC-02](epics/EPIC-02-configuration-dimensions-and-limits.md) | Configuration, Dimensions and Limits | 6 | 34 | 0 / 6 | `In Review` |
-| [EPIC-03](epics/EPIC-03-counter-engine.md) | Counter Engine | 7 | 45 | 0 / 7 | `Not Started` |
+| [EPIC-03](epics/EPIC-03-counter-engine.md) | Counter Engine | 7 | 45 | 0 / 7 | `In Review` |
 | [EPIC-04](epics/EPIC-04-transaction-validation-and-idempotency.md) | Transaction Validation and Idempotency | 6 | 39 | 0 / 6 | `Not Started` |
 | [EPIC-05](epics/EPIC-05-reversal-and-reconciliation.md) | Reversal and Reconciliation | 2 | 16 | 0 / 2 | `Not Started` |
 | [EPIC-06](epics/EPIC-06-operations-resilience-and-compliance.md) | Operations, Resilience and Compliance | 4 | 23 | 0 / 4 | `Not Started` |
@@ -79,7 +79,7 @@ These are unresolved inputs from the BRD, not engineering decisions. Each blocks
 | Statutory record retention term | STORY-06-01 | Compliance |
 | Field-level encryption decision for customer and account identifiers | STORY-06-04 | Compliance and Security |
 | Recovery time and recovery point objectives, and DR topology | STORY-06-03 | Infrastructure |
-| MongoDB 5.0 or later confirmed in every environment | STORY-03-06 | Infrastructure |
+| MongoDB 5.0 or later confirmed in every environment — local/CI dev confirmed at 7.0.39 (2026-08-11); staging/production not yet provisioned | STORY-03-06 | Infrastructure |
 | Whether the 1000 RPS target is per direction or combined | STORY-08-06 | Business and Infrastructure |
 | Inward dimension set and the source of its attributes | STORY-08-03 | Business and Risk |
 | Whether any combined total-throughput control is required | STORY-08-04 | Risk |
@@ -112,13 +112,13 @@ These are unresolved inputs from the BRD, not engineering decisions. Each blocks
 
 | Story | Title | Pri | Est | Acceptance cases | Status | Completed on | Verified by |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| [STORY-03-01](stories/STORY-03-01-counter-key-builder-document-model-and-ttl-cleanup.md) | Counter key builder, document model and TTL cleanup | Must | 5 | UAT 21 | `Not Started` | | |
-| [STORY-03-02](stories/STORY-03-02-tier-0-stateless-per-transaction-check.md) | Tier 0 stateless per-transaction check | Must | 3 | UAT 12, UAT 13, UAT 33 | `Not Started` | | |
-| [STORY-03-03](stories/STORY-03-03-tier-1-bootstrap-plus-guarded-conditional-increment.md) | Tier 1 bootstrap plus guarded conditional increment | Must | 8 | UAT 29, UAT 33 | `Not Started` | | |
-| [STORY-03-04](stories/STORY-03-04-tier-2-sharded-counters-with-cached-totals.md) | Tier 2 sharded counters with cached totals | Must | 8 | UAT 19, UAT 20, UAT 22 | `Not Started` | | |
-| [STORY-03-05](stories/STORY-03-05-safe-shard-factor-change-semantics.md) | Safe shard factor change semantics | Must | 5 | UAT 34 | `Not Started` | | |
-| [STORY-03-06](stories/STORY-03-06-rolling-window-as-a-single-document-with-pipeline-update.md) | Rolling window as a single document with pipeline update | Must | 13 | UAT 31, UAT 32, UAT 1 | `Not Started` | | |
-| [STORY-03-07](stories/STORY-03-07-read-preference-and-write-concern-policy.md) | Read preference and write concern policy | Must | 3 | UAT 37 | `Not Started` | | |
+| [STORY-03-01](stories/STORY-03-01-counter-key-builder-document-model-and-ttl-cleanup.md) | Counter key builder, document model and TTL cleanup | Must | 5 | UAT 21 | `In Review` | | |
+| [STORY-03-02](stories/STORY-03-02-tier-0-stateless-per-transaction-check.md) | Tier 0 stateless per-transaction check | Must | 3 | UAT 12, UAT 13, UAT 33 | `In Review` | | |
+| [STORY-03-03](stories/STORY-03-03-tier-1-bootstrap-plus-guarded-conditional-increment.md) | Tier 1 bootstrap plus guarded conditional increment | Must | 8 | UAT 29, UAT 33 | `In Review` | | |
+| [STORY-03-04](stories/STORY-03-04-tier-2-sharded-counters-with-cached-totals.md) | Tier 2 sharded counters with cached totals | Must | 8 | UAT 19, UAT 20, UAT 22 | `In Review` | | |
+| [STORY-03-05](stories/STORY-03-05-safe-shard-factor-change-semantics.md) | Safe shard factor change semantics | Must | 5 | UAT 34 | `In Review` | | |
+| [STORY-03-06](stories/STORY-03-06-rolling-window-as-a-single-document-with-pipeline-update.md) | Rolling window as a single document with pipeline update | Must | 13 | UAT 31, UAT 32, UAT 1 | `In Review` | | |
+| [STORY-03-07](stories/STORY-03-07-read-preference-and-write-concern-policy.md) | Read preference and write concern policy | Must | 3 | UAT 37 | `In Progress` | | |
 
 ### EPIC-04 — Transaction Validation and Idempotency
 

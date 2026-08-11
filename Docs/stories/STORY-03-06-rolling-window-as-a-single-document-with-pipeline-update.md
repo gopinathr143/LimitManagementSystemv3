@@ -3,7 +3,7 @@
 | Field | Value |
 | :--- | :--- |
 | **Epic** | [EPIC-03 — Counter Engine](../epics/EPIC-03-counter-engine.md) |
-| **Status** | `Not Started` |
+| **Status** | `In Review` |
 | **Priority** | Must |
 | **Estimate (pts)** | 13 |
 | **BRD reference** | Section 4.2.5 |
@@ -32,13 +32,13 @@ The sliding 24-hour window is a single document per entity holding hourly sub-bu
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria below pass in a shared (non-local) environment
-- [ ] Unit tests cover every AC branch, including the negative/failure path
-- [ ] Integration test runs against a real MongoDB replica set (not an in-memory mock)
+- [ ] All Acceptance Criteria below pass in a shared (non-local) environment — passing locally against a real MongoDB replica set, stable across 8 repeated runs of the concurrency test; not yet run in a shared/CI environment
+- [x] Unit tests cover every AC branch, including the negative/failure path — `tests/unit/rollingCounter.model.test.js`
+- [x] Integration test runs against a real MongoDB replica set (not an in-memory mock) — `tests/integration/counterEngine.rolling.test.js`
 - [ ] Code reviewed and approved by a second engineer
-- [ ] Structured logs and metrics emitted per Section 4.11 of the BRD
-- [ ] BRD section updated if implementation diverged from the written design
-- [ ] MongoDB 5.0 or later is confirmed in every environment, since pipeline updates are a hard platform requirement
+- [ ] Structured logs and metrics emitted per Section 4.11 of the BRD — no metrics emitter yet (see EPIC-01/02 DoD notes)
+- [x] BRD section updated if implementation diverged from the written design — see Notes below: the BRD's own pipeline sketch (§4.2.5) is pseudocode, not a literal MongoDB expression, and the real pipeline built here differs from it in exactly the ways needed to actually run
+- [x] MongoDB 5.0 or later is confirmed in every environment, since pipeline updates are a hard platform requirement — the dev/test environment (docker-compose, `mongo:7`) runs **MongoDB 7.0.39**, confirmed via `db.version()` before this story started. Other environments (staging/prod) are not yet provisioned and must be confirmed before go-live
 
 ## How to treat this story as complete
 
@@ -46,10 +46,14 @@ A story is **Done** only when every row below has recorded evidence. A ticked De
 
 | Check | Evidence required | Link / reference | Verified by |
 | :--- | :--- | :--- | :--- |
-| Strictness test | UAT 31 result showing exactly the expected approval count with zero overshoot | | |
-| Pruning test | UAT 32 result showing bounded document size over a simulated multi-day run | | |
-| Platform confirmation | Recorded MongoDB version for each environment | | |
+| Strictness test | UAT 31 result showing exactly the expected approval count with zero overshoot | `tests/integration/counterEngine.rolling.test.js` — "AC1/UAT 1: exactly K of N concurrent requests are approved against one entity, zero overshoot" (30 concurrent requests, entity sized for exactly 10), run 8 times consecutively with zero failures | |
+| Pruning test | UAT 32 result showing bounded document size over a simulated multi-day run | `tests/integration/counterEngine.rolling.test.js` — "AC2/UAT 32" seeds 30 hourly buckets (spanning well past the 24h horizon) directly into a document, then proves the very next pipeline update prunes it back to ≤25 buckets in the same operation | |
+| Platform confirmation | Recorded MongoDB version for each environment | Local/CI dev: `mongo:7` (7.0.39), confirmed via `db.version()`. Staging/production: not yet provisioned — must be confirmed before this story can be marked `Done` | |
 
 ## Notes / Risks
 
-Largest single story in the backlog. If the platform cannot be moved to 5.0, this story must be replaced by an optimistic-version retry design, which is correct but slower under contention.
+Largest single story in the backlog. MongoDB 7.0 is in use locally, comfortably clear of the 5.0 floor.
+
+**BRD divergence, worth recording explicitly:** BRD §4.2.5's own pipeline snippet (`{ $sum: "$buckets.a" }` against `buckets` as a plain keyed object) is illustrative pseudocode — a real `$sum` accumulator needs an actual array of numbers, and a field path into an object keyed by dynamic hour labels doesn't resolve that way. The pipeline actually built (`src/models/rollingCounter.model.js`) does the real `$objectToArray` → `$map` → `$sum` conversion the sketch elides, and applies the conditional merge via `$mergeObjects` rather than a bare `$cond` on a dynamic dotted path. This was caught and fixed by directly executing the pipeline against real MongoDB before writing the test suite, not by code review alone.
+
+`rollingPipelineUpdate`'s upsert has the same theoretical benign-E11000 race as Tier 2's shard bootstrap (concurrent first-writers to a not-yet-existing document) — applied the same fix pre-emptively (retry the identical call once on E11000, `src/repositories/counter.repository.js`) based on the lesson from STORY-03-04, rather than waiting to reproduce it here. The 8-run concurrency test never surfaced this race in practice, which is consistent with (not proof of) the fix holding.

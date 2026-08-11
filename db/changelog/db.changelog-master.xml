@@ -14,4 +14,7 @@
     <include file="changes/004-limits-collection.xml" relativeToChangelogFile="true"/>
     <include file="changes/005-limits-audit-collection.xml" relativeToChangelogFile="true"/>
 
+    <!-- EPIC-03 — Counter Engine -->
+    <include file="changes/006-counters-collection.xml" relativeToChangelogFile="true"/>
+
 </databaseChangeLog>

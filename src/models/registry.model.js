@@ -62,6 +62,34 @@ function resolveActivationTiming({ windowType, override, previousWindowEntry, ti
   return { declaredAt, boundaryAt, warming };
 }
 
+/**
+ * BRD §4.2.6 / STORY-03-05 — an append-only history of {value, effectiveAt}
+ * so the reader can sum `max(historicalShardFactor, currentShardFactor)`
+ * buckets for an open window and never orphan one. A decrease is always
+ * scheduled for the next boundary; an increase is safe immediately because
+ * summing more buckets than before can only ever add coverage, never drop
+ * it. There is deliberately no input path to force an immediate decrease —
+ * "registry validation rejects a shardFactor change that would take effect
+ * mid-window" (STORY-03-05 AC3) is satisfied structurally, not by an
+ * explicit runtime check, because no caller-facing flag exists to request it.
+ */
+function resolveShardFactorHistory({ effectiveShardFactor, previousWindowEntry, boundaryAt, now }) {
+  if (effectiveShardFactor === undefined) {
+    return undefined;
+  }
+  const previousHistory = previousWindowEntry?.shardFactorHistory;
+  if (!previousHistory || previousHistory.length === 0) {
+    // First time this window carries a shardFactor — nothing open to protect yet.
+    return [{ value: effectiveShardFactor, effectiveAt: now }];
+  }
+  const last = previousHistory[previousHistory.length - 1];
+  if (effectiveShardFactor === last.value) {
+    return previousHistory;
+  }
+  const effectiveAt = effectiveShardFactor > last.value ? now : boundaryAt;
+  return [...previousHistory, { value: effectiveShardFactor, effectiveAt }];
+}
+
 function validateWindowOverride(dimensionCode, windowType, rawOverride, errors) {
   if (rawOverride === undefined || rawOverride === null) {
     return {};
@@ -174,7 +202,10 @@ function validateDimension(rawDimension, { previousDimension, timezone, now, err
     const previousWindowEntry = previousDimension?.windows?.[windowType];
     const timing = resolveActivationTiming({ windowType, override: rawWindowsMap[windowType], previousWindowEntry, timezone, now });
 
-    windows[windowType] = { ...validatedOverride, ...timing };
+    const effectiveShardFactor = hot ? validatedOverride.shardFactor ?? shardFactor : undefined;
+    const shardFactorHistory = resolveShardFactorHistory({ effectiveShardFactor, previousWindowEntry, boundaryAt: timing.boundaryAt, now });
+
+    windows[windowType] = { ...validatedOverride, ...timing, ...(shardFactorHistory ? { shardFactorHistory } : {}) };
   }
 
   return { code: dimensionCode, attributes: [...attributes], hot, shardFactor, windows };
@@ -243,6 +274,27 @@ export function deriveWindowState(windowEntry, now = new Date()) {
 export function isWindowEnforced(windowEntry, now = new Date()) {
   const state = deriveWindowState(windowEntry, now);
   return state === WINDOW_STATE.ACTIVE || state === WINDOW_STATE.WARMING;
+}
+
+/** BRD §4.2.6 AC2 — the reader-side safety rule: sum `max(historicalShardFactor, currentShardFactor)` buckets for any open window. */
+export function resolveShardFactorForRead(windowEntry, now = new Date()) {
+  const history = windowEntry?.shardFactorHistory;
+  if (!history || history.length === 0) {
+    return undefined;
+  }
+  const inForce = history.filter((entry) => entry.effectiveAt <= now);
+  const pool = inForce.length > 0 ? inForce : history;
+  return Math.max(...pool.map((entry) => entry.value));
+}
+
+/** The shardFactor a NEW write should pick a bucket index against — the latest history entry that has actually taken effect. */
+export function resolveShardFactorForWrite(windowEntry, now = new Date()) {
+  const history = windowEntry?.shardFactorHistory;
+  if (!history || history.length === 0) {
+    return undefined;
+  }
+  const inForce = history.filter((entry) => entry.effectiveAt <= now);
+  return inForce.length > 0 ? inForce[inForce.length - 1].value : history[0].value;
 }
 
 export function findDimension(registrySnapshot, dimensionCode) {

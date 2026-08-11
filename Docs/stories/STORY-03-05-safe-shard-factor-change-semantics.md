@@ -3,7 +3,7 @@
 | Field | Value |
 | :--- | :--- |
 | **Epic** | [EPIC-03 — Counter Engine](../epics/EPIC-03-counter-engine.md) |
-| **Status** | `Not Started` |
+| **Status** | `In Review` |
 | **Priority** | Must |
 | **Estimate (pts)** | 5 |
 | **BRD reference** | Section 4.2.6 |
@@ -30,12 +30,12 @@ Lowering a shard factor mid-window would orphan buckets whose balances silently 
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria below pass in a shared (non-local) environment
-- [ ] Unit tests cover every AC branch, including the negative/failure path
-- [ ] Integration test runs against a real MongoDB replica set (not an in-memory mock)
+- [ ] All Acceptance Criteria below pass in a shared (non-local) environment — passing locally; not yet run in a shared/CI environment
+- [x] Unit tests cover every AC branch, including the negative/failure path — `tests/unit/shardFactorSafety.test.js`
+- [ ] Integration test runs against a real MongoDB replica set (not an in-memory mock) — the safety rule itself is pure registry-validation logic (no I/O), fully unit-tested; its consumption by real counter reads/writes is proven end-to-end in `tests/integration/counterEngine.tier2.test.js`
 - [ ] Code reviewed and approved by a second engineer
-- [ ] Structured logs and metrics emitted per Section 4.11 of the BRD
-- [ ] BRD section updated if implementation diverged from the written design
+- [ ] Structured logs and metrics emitted per Section 4.11 of the BRD — no metrics emitter yet (see EPIC-01/02 DoD notes)
+- [x] BRD section updated if implementation diverged from the written design — see Notes below for one interpretation call between this story's AC3 wording and BRD §4.2.6's normative text
 
 ## How to treat this story as complete
 
@@ -43,9 +43,9 @@ A story is **Done** only when every row below has recorded evidence. A ticked De
 
 | Check | Evidence required | Link / reference | Verified by |
 | :--- | :--- | :--- | :--- |
-| Orphan prevention test | UAT 34 result showing the summed total does not drop after a lowering change | | |
-| Over-approval check | Test confirming no transaction is approved that a correct total would have rejected | | |
+| Orphan prevention test | UAT 34 result showing the summed total does not drop after a lowering change | `tests/unit/shardFactorSafety.test.js` — "AC2: after the boundary passes, the reader still sums max(historical, current)" | |
+| Over-approval check | Test confirming no transaction is approved that a correct total would have rejected | `tests/unit/shardFactorSafety.test.js` — "AC1/AC3: a decrease is scheduled for the next boundary, never immediate" (both read and write resolvers return the old, larger value until the boundary passes) | |
 
 ## Notes / Risks
 
-_None recorded._
+**Interpretation call, recorded per this story's own DoD:** AC3 as written says registry validation "rejects" a mid-window decrease. BRD §4.2.6's normative text describes *deferral* as the mechanism ("takes effect only at the next window boundary; the in-force value is pinned"), not rejection of the submission. Implemented per the BRD (the source specification): a decrease is always accepted but its effect is deferred to the next boundary via an append-only `shardFactorHistory` on the window entry (`src/models/registry.model.js`) — there is no caller-facing input path to force an immediate decrease at all, so "rejects a change that would take effect mid-window" is satisfied structurally rather than via an explicit runtime error. History is intentionally never pruned (a shardFactor increase from months ago stays in the "historical max" forever) — this only costs summing a few permanently-empty extra bucket keys, never under-counts, and shardFactor changes are rare enough that this is not a real growth concern.

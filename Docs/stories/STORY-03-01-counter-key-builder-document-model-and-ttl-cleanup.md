@@ -3,7 +3,7 @@
 | Field | Value |
 | :--- | :--- |
 | **Epic** | [EPIC-03 — Counter Engine](../epics/EPIC-03-counter-engine.md) |
-| **Status** | `Not Started` |
+| **Status** | `In Review` |
 | **Priority** | Must |
 | **Estimate (pts)** | 5 |
 | **BRD reference** | Section 4.2 |
@@ -31,12 +31,12 @@ Build counter document identifiers programmatically from the client registry, al
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria below pass in a shared (non-local) environment
-- [ ] Unit tests cover every AC branch, including the negative/failure path
-- [ ] Integration test runs against a real MongoDB replica set (not an in-memory mock)
+- [ ] All Acceptance Criteria below pass in a shared (non-local) environment — passing locally against a real MongoDB replica set (docker-compose `rs0`); not yet run in a shared/CI environment
+- [x] Unit tests cover every AC branch, including the negative/failure path — `tests/unit/counter.model.test.js`
+- [x] Integration test runs against a real MongoDB replica set (not an in-memory mock) — `tests/integration-slow/counterTtl.test.js` (real TTL expiry), plus every Tier1/Tier2/rolling integration test exercises the key builder and document model indirectly
 - [ ] Code reviewed and approved by a second engineer
-- [ ] Structured logs and metrics emitted per Section 4.11 of the BRD
-- [ ] BRD section updated if implementation diverged from the written design
+- [ ] Structured logs and metrics emitted per Section 4.11 of the BRD — no metrics emitter yet (see EPIC-01/02 DoD notes); this story has no rejection/decision path of its own to log
+- [ ] BRD section updated if implementation diverged from the written design — no divergence identified (direction segment intentionally omitted from the key format for now; deferred to EPIC-08 per `docs/00-INDEX.md`'s suggested delivery sequence)
 
 ## How to treat this story as complete
 
@@ -44,10 +44,10 @@ A story is **Done** only when every row below has recorded evidence. A ticked De
 
 | Check | Evidence required | Link / reference | Verified by |
 | :--- | :--- | :--- | :--- |
-| Key determinism test | Unit test output covering zero, single and composite attribute dimensions | | |
-| TTL test | UAT 21 result showing automatic removal after window expiry | | |
-| Collision test | Two-client key generation showing distinct keys | | |
+| Key determinism test | Unit test output covering zero, single and composite attribute dimensions | `tests/unit/counter.model.test.js` — AC1 (composite), zero-attribute GLOBAL example, determinism-on-repeat | |
+| TTL test | UAT 21 result showing automatic removal after window expiry | `tests/integration-slow/counterTtl.test.js` — a document with `expireAt` in the past is genuinely removed by MongoDB's own TTL monitor within ~90s (observed: ~16s), zero application cleanup code involved | |
+| Collision test | Two-client key generation showing distinct keys | `tests/unit/counter.model.test.js` — AC2 | |
 
 ## Notes / Risks
 
-_None recorded._
+`yarn test:integration:slow` is a separate script from `yarn test:integration` specifically for the TTL test — MongoDB's background TTL sweep runs on its own ~60s cadence, so this test genuinely waits on real infrastructure rather than asserting index metadata. Keeping it out of the default integration run avoids a 90s tax on every routine test invocation.
