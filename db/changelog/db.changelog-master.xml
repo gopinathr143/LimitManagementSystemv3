@@ -9,4 +9,9 @@
     <include file="changes/001-clients-collection.xml" relativeToChangelogFile="true"/>
     <include file="changes/002-config-audit-collection.xml" relativeToChangelogFile="true"/>
 
+    <!-- EPIC-02 — Configuration, Dimensions and Limits -->
+    <include file="changes/003-client-configs-collection.xml" relativeToChangelogFile="true"/>
+    <include file="changes/004-limits-collection.xml" relativeToChangelogFile="true"/>
+    <include file="changes/005-limits-audit-collection.xml" relativeToChangelogFile="true"/>
+
 </databaseChangeLog>

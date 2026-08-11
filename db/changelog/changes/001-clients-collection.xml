@@ -22,23 +22,13 @@
                   "validator": {
                     "$jsonSchema": {
                       "bsonType": "object",
-                      "required": ["_id", "clientId", "name", "status", "timezone", "authBinding", "createdAt", "updatedAt"],
+                      "required": ["_id", "clientId", "name", "status", "timezone", "createdAt", "updatedAt"],
                       "properties": {
                         "_id": { "bsonType": "string", "description": "clientId, stable and unique" },
                         "clientId": { "bsonType": "string" },
                         "name": { "bsonType": "string", "minLength": 1 },
                         "status": { "enum": ["ACTIVE", "SUSPENDED"] },
                         "timezone": { "bsonType": "string", "description": "IANA timezone name" },
-                        "authBinding": {
-                          "bsonType": "object",
-                          "required": ["type", "apiKeyHash", "fingerprint", "rotatedAt"],
-                          "properties": {
-                            "type": { "enum": ["API_KEY"] },
-                            "apiKeyHash": { "bsonType": "string" },
-                            "fingerprint": { "bsonType": "string" },
-                            "rotatedAt": { "bsonType": "date" }
-                          }
-                        },
                         "createdBy": { "bsonType": "string" },
                         "createdAt": { "bsonType": "date" },
                         "updatedAt": { "bsonType": "date" }
@@ -56,18 +46,6 @@
         <mongodb:createIndex collectionName="clients">
             <mongodb:keys>{ "clientId": 1 }</mongodb:keys>
             <mongodb:options>{ "unique": true, "name": "idx_clients_clientId_unique" }</mongodb:options>
-        </mongodb:createIndex>
-    </changeSet>
-
-    <!--
-        Unique per active credential — the lookup path for tenant auth
-        (STORY-01-02). Sparse so a client mid-rotation without a hash never
-        collides on null.
-    -->
-    <changeSet id="003-clients-unique-apikeyhash-idx" author="imps-velocity">
-        <mongodb:createIndex collectionName="clients">
-            <mongodb:keys>{ "authBinding.apiKeyHash": 1 }</mongodb:keys>
-            <mongodb:options>{ "unique": true, "sparse": true, "name": "idx_clients_apiKeyHash_unique" }</mongodb:options>
         </mongodb:createIndex>
     </changeSet>
 

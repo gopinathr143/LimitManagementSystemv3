@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:mongodb="http://www.liquibase.org/xml/ns/mongodb"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+        http://www.liquibase.org/xml/ns/mongodb
+        http://www.liquibase.org/xml/ns/mongodb/liquibase-mongodb-latest.xsd">
+
+    <!--
+        BRD §4.4 "Change auditability" — immutable trail for registry
+        changes (incl. window activation state, §4.3.2/§4.3.3) and every
+        limit-definition create/update/deactivate. Kept separate from
+        `configAudit` (STORY-01-01, client lifecycle) because the BRD names
+        this collection specifically for limit/registry changes.
+    -->
+    <changeSet id="001-create-limits-audit-collection" author="imps-velocity">
+        <mongodb:createCollection collectionName="limitsAudit">
+            <mongodb:options>
+                {
+                  "validator": {
+                    "$jsonSchema": {
+                      "bsonType": "object",
+                      "required": ["clientId", "resource", "action", "actor", "occurredAt"],
+                      "properties": {
+                        "clientId": { "bsonType": "string" },
+                        "resource": { "enum": ["REGISTRY", "LIMIT_DEFINITION"] },
+                        "action": { "bsonType": "string" },
+                        "actor": { "bsonType": "string" },
+                        "definitionVersion": { "bsonType": ["number", "null"] },
+                        "before": { "bsonType": ["object", "array", "null"] },
+                        "after": { "bsonType": ["object", "array", "null"] },
+                        "occurredAt": { "bsonType": "date" }
+                      }
+                    }
+                  },
+                  "validationLevel": "strict",
+                  "validationAction": "error"
+                }
+            </mongodb:options>
+        </mongodb:createCollection>
+    </changeSet>
+
+    <changeSet id="002-limits-audit-client-occurredat-idx" author="imps-velocity">
+        <mongodb:createIndex collectionName="limitsAudit">
+            <mongodb:keys>{ "clientId": 1, "occurredAt": -1 }</mongodb:keys>
+            <mongodb:options>{ "name": "idx_limitsAudit_clientId_occurredAt" }</mongodb:options>
+        </mongodb:createIndex>
+    </changeSet>
+
+</databaseChangeLog>

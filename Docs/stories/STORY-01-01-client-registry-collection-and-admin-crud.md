@@ -17,17 +17,19 @@
 
 ## Description
 
-Create the `clients` collection and the admin-only endpoints to onboard and manage tenants. A client record carries its identity, status, authentication binding and timezone. This is the root of the tenancy model, so it lands before anything that consumes a `clientId`.
+Create the `clients` collection and the endpoints to onboard and manage tenants. A client record carries its identity, status and timezone. This is the root of the tenancy model, so it lands before anything that consumes a `clientId`.
+
+> **Divergence from the original scope (2026-08-11):** per the decision recorded in [STORY-01-02](STORY-01-02-client-authentication-and-clientid-derivation.md), this API has no authentication — callers are trusted same-cluster consumers. `/clients` is not admin-gated by a separate credential; it is reachable the same way every other route is. The `clients` record no longer carries an `authBinding` field (there is no credential to bind). AC3 below (role separation) is consequently inapplicable and struck out rather than deleted, so the historical record is clear about what changed and why.
 
 ## Acceptance Criteria
 
 | # | Given | When | Then |
 | :-- | :--- | :--- | :--- |
-| 1 | an admin caller with the admin role | they POST a valid client payload to /clients | the client is persisted with status ACTIVE, a unique clientId, and createdBy or createdAt audit fields populated |
-| 2 | an existing clientId | an admin POSTs the same clientId again | the request is rejected with a conflict error and no second record is created |
-| 3 | a caller holding only a tenant role (not admin) | they call any /clients endpoint | the request is rejected as unauthorised and no client data is returned |
-| 4 | a client payload with an invalid IANA timezone | an admin submits it | validation rejects it and names the offending field |
-| 5 | an existing client | an admin PATCHes status to SUSPENDED | the change is persisted and written to the configuration audit trail with actor and timestamp |
+| 1 | a caller | they POST a valid client payload to /clients | the client is persisted with status ACTIVE, a unique clientId, and createdBy or createdAt audit fields populated |
+| 2 | an existing clientId | a caller POSTs the same clientId again | the request is rejected with a conflict error and no second record is created |
+| 3 | ~~a caller holding only a tenant role (not admin)~~ | ~~they call any /clients endpoint~~ | **Superseded — no role distinction exists; see divergence note above** |
+| 4 | a client payload with an invalid IANA timezone | a caller submits it | validation rejects it and names the offending field |
+| 5 | an existing client | a caller PATCHes status to SUSPENDED | the change is persisted and written to the configuration audit trail with actor (from the optional, unverified `x-actor-id` header) and timestamp |
 
 ## Definition of Done
 
@@ -36,8 +38,8 @@ Create the `clients` collection and the admin-only endpoints to onboard and mana
 - [x] Integration test runs against a real MongoDB replica set (not an in-memory mock) — `tests/integration/client.admin.test.js`
 - [ ] Code reviewed and approved by a second engineer
 - [ ] Structured logs and metrics emitted per Section 4.11 of the BRD — structured logs via pino are in place (`src/config/logger.js`); no metrics emitter (e.g. prom-client counters) has been added yet
-- [ ] BRD section updated if implementation diverged from the written design — no divergence identified
-- [x] Admin role is enforced by a separate credential from tenant API credentials — `ADMIN_API_KEYS` env-configured, disjoint from per-client `authBinding.apiKeyHash` (`src/middleware/adminAuth.middleware.js`)
+- [x] BRD section updated if implementation diverged from the written design — see divergence note above and STORY-01-02
+- [ ] ~~Admin role is enforced by a separate credential from tenant API credentials~~ — superseded; there is no admin credential, see divergence note above
 
 ## How to treat this story as complete
 
@@ -45,9 +47,9 @@ A story is **Done** only when every row below has recorded evidence. A ticked De
 
 | Check | Evidence required | Link / reference | Verified by |
 | :--- | :--- | :--- | :--- |
-| Integration test run | CI job link showing the client CRUD suite green | Local: `yarn test:integration` → `tests/integration/client.admin.test.js` (5/5 passing against docker-compose `rs0`); no CI job exists yet | |
-| Role separation proven | Test output showing a tenant-role token rejected on /clients | `tests/integration/client.admin.test.js` — "AC3: a non-admin caller is rejected on every /clients endpoint" | |
-| Audit trail | Sample audit record for a status change, showing actor and before/after | `tests/integration/client.admin.test.js` — "AC5: PATCH status to SUSPENDED..."; entries land in `configAudit` (`src/models/configAudit.model.js`) | |
+| Integration test run | CI job link showing the client CRUD suite green | Local: `yarn test:integration` → `tests/integration/client.admin.test.js` (6/6 passing against docker-compose `rs0`); no CI job exists yet | |
+| ~~Role separation proven~~ | ~~Test output showing a tenant-role token rejected on /clients~~ | Superseded — no roles exist | |
+| Audit trail | Sample audit record for a status change, showing actor and before/after | `tests/integration/client.admin.test.js` — "AC5: PATCH status to SUSPENDED..." (actor sourced from `x-actor-id`); entries land in `configAudit` (`src/models/configAudit.model.js`) | |
 
 ## Notes / Risks
 

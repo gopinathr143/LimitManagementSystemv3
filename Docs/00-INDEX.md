@@ -10,7 +10,7 @@
 
 Each story is a self-contained file holding its description, acceptance criteria in Given / When / Then form, a Definition of Done, and a completion-evidence table.
 
-**Status values:** `Not Started` · `In Progress` · `In Review` · `Blocked` · `Done`
+**Status values:** `Not Started` · `In Progress` · `In Review` · `Blocked` · `Done` · `Superseded` (scope replaced by a recorded, deliberate decision — see the story file)
 
 **Updating status — two places, always:**
 1. The `Status` field in the story file, plus `Completed on` and `Verified by` when it closes.
@@ -32,7 +32,7 @@ A ticked Definition of Done without recorded evidence does not close a story. An
 | Epic | Title | Stories | Points | Complete | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | [EPIC-01](epics/EPIC-01-tenancy-foundation.md) | Tenancy Foundation | 4 | 24 | 0 / 4 | `In Review` |
-| [EPIC-02](epics/EPIC-02-configuration-dimensions-and-limits.md) | Configuration, Dimensions and Limits | 6 | 34 | 0 / 6 | `Not Started` |
+| [EPIC-02](epics/EPIC-02-configuration-dimensions-and-limits.md) | Configuration, Dimensions and Limits | 6 | 34 | 0 / 6 | `In Review` |
 | [EPIC-03](epics/EPIC-03-counter-engine.md) | Counter Engine | 7 | 45 | 0 / 7 | `Not Started` |
 | [EPIC-04](epics/EPIC-04-transaction-validation-and-idempotency.md) | Transaction Validation and Idempotency | 6 | 39 | 0 / 6 | `Not Started` |
 | [EPIC-05](epics/EPIC-05-reversal-and-reconciliation.md) | Reversal and Reconciliation | 2 | 16 | 0 / 2 | `Not Started` |
@@ -75,7 +75,7 @@ These are unresolved inputs from the BRD, not engineering decisions. Each blocks
 
 | Open item | Blocks | Owner |
 | :--- | :--- | :--- |
-| Client authentication mechanism (API key, mTLS or OAuth) | STORY-01-02 | Security |
+| ~~Client authentication mechanism (API key, mTLS or OAuth)~~ — resolved 2026-08-11: no authentication (same-cluster trust); OAuth+scopes planned if ever exposed externally | STORY-01-02 | Security |
 | Statutory record retention term | STORY-06-01 | Compliance |
 | Field-level encryption decision for customer and account identifiers | STORY-06-04 | Compliance and Security |
 | Recovery time and recovery point objectives, and DR topology | STORY-06-03 | Infrastructure |
@@ -93,7 +93,7 @@ These are unresolved inputs from the BRD, not engineering decisions. Each blocks
 | Story | Title | Pri | Est | Acceptance cases | Status | Completed on | Verified by |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | [STORY-01-01](stories/STORY-01-01-client-registry-collection-and-admin-crud.md) | Client registry collection and admin CRUD | Must | 5 | UAT 28 | `In Review` | | |
-| [STORY-01-02](stories/STORY-01-02-client-authentication-and-clientid-derivation.md) | Client authentication and clientId derivation | Must | 8 | UAT 26, UAT 27 | `In Review` | | |
+| [STORY-01-02](stories/STORY-01-02-client-authentication-and-clientid-derivation.md) | Client authentication and clientId derivation | Must | 8 | UAT 26, UAT 27 | `Superseded` | | |
 | [STORY-01-03](stories/STORY-01-03-tenant-isolation-across-all-data-access.md) | Tenant isolation across all data access | Must | 8 | UAT 23, UAT 24 | `In Progress` | | |
 | [STORY-01-04](stories/STORY-01-04-client-lifecycle-and-fail-closed-gating.md) | Client lifecycle and fail-closed gating | Must | 3 | UAT 26 | `In Review` | | |
 
@@ -101,12 +101,12 @@ These are unresolved inputs from the BRD, not engineering decisions. Each blocks
 
 | Story | Title | Pri | Est | Acceptance cases | Status | Completed on | Verified by |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| [STORY-02-01](stories/STORY-02-01-per-client-dimension-registry-with-validated-snapshot-loading.md) | Per-client dimension registry with validated snapshot loading | Must | 8 | UAT 25 | `Not Started` | | |
-| [STORY-02-02](stories/STORY-02-02-per-dimension-window-declaration.md) | Per-dimension window declaration | Must | 5 | UAT 41, UAT 42 | `Not Started` | | |
-| [STORY-02-03](stories/STORY-02-03-window-activation-timing-and-warming-state.md) | Window activation timing and warming state | Must | 5 | UAT 43 | `Not Started` | | |
-| [STORY-02-04](stories/STORY-02-04-limit-definition-crud-with-versioning-and-audit.md) | Limit definition CRUD with versioning and audit | Must | 8 | UAT 11, UAT 16, UAT 39 | `Not Started` | | |
-| [STORY-02-05](stories/STORY-02-05-inert-definition-warnings-and-effective-flag.md) | Inert definition warnings and effective flag | Should | 3 | UAT 15, UAT 41 | `Not Started` | | |
-| [STORY-02-06](stories/STORY-02-06-in-process-definition-and-registry-cache-with-invalidation.md) | In-process definition and registry cache with invalidation | Must | 5 | UAT 11 | `Not Started` | | |
+| [STORY-02-01](stories/STORY-02-01-per-client-dimension-registry-with-validated-snapshot-loading.md) | Per-client dimension registry with validated snapshot loading | Must | 8 | UAT 25 | `In Review` | | |
+| [STORY-02-02](stories/STORY-02-02-per-dimension-window-declaration.md) | Per-dimension window declaration | Must | 5 | UAT 41, UAT 42 | `In Progress` | | |
+| [STORY-02-03](stories/STORY-02-03-window-activation-timing-and-warming-state.md) | Window activation timing and warming state | Must | 5 | UAT 43 | `In Progress` | | |
+| [STORY-02-04](stories/STORY-02-04-limit-definition-crud-with-versioning-and-audit.md) | Limit definition CRUD with versioning and audit | Must | 8 | UAT 11, UAT 16, UAT 39 | `In Review` | | |
+| [STORY-02-05](stories/STORY-02-05-inert-definition-warnings-and-effective-flag.md) | Inert definition warnings and effective flag | Should | 3 | UAT 15, UAT 41 | `In Review` | | |
+| [STORY-02-06](stories/STORY-02-06-in-process-definition-and-registry-cache-with-invalidation.md) | In-process definition and registry cache with invalidation | Must | 5 | UAT 11 | `In Progress` | | |
 
 ### EPIC-03 — Counter Engine
 

@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateClientCreatePayload, sanitizeClient } from '../../src/models/client.model.js';
+import { validateClientCreatePayload } from '../../src/models/client.model.js';
 import { AppError } from '../../src/utils/AppError.js';
 
 describe('client.model validation — STORY-01-01 AC4', () => {
@@ -28,17 +28,5 @@ describe('client.model validation — STORY-01-01 AC4', () => {
 
   test('rejects a missing name', () => {
     assert.throws(() => validateClientCreatePayload({ clientId: 'CLIENT_A', timezone: 'UTC' }), AppError);
-  });
-});
-
-describe('sanitizeClient', () => {
-  test('never leaks apiKeyHash', () => {
-    const sanitized = sanitizeClient({
-      _id: 'CLIENT_A',
-      clientId: 'CLIENT_A',
-      authBinding: { type: 'API_KEY', apiKeyHash: 'super-secret-hash', fingerprint: 'abc123', rotatedAt: new Date() },
-    });
-    assert.equal(sanitized.authBinding.apiKeyHash, undefined);
-    assert.equal(JSON.stringify(sanitized).includes('super-secret-hash'), false);
   });
 });
