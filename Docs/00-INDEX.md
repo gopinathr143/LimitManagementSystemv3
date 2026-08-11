@@ -36,7 +36,7 @@ A ticked Definition of Done without recorded evidence does not close a story. An
 | [EPIC-03](epics/EPIC-03-counter-engine.md) | Counter Engine | 7 | 45 | 0 / 7 | `In Review` |
 | [EPIC-04](epics/EPIC-04-transaction-validation-and-idempotency.md) | Transaction Validation and Idempotency | 6 | 39 | 0 / 6 | `In Review` |
 | [EPIC-05](epics/EPIC-05-reversal-and-reconciliation.md) | Reversal and Reconciliation | 2 | 16 | 0 / 2 | `In Review` |
-| [EPIC-06](epics/EPIC-06-operations-resilience-and-compliance.md) | Operations, Resilience and Compliance | 4 | 23 | 0 / 4 | `Not Started` |
+| [EPIC-06](epics/EPIC-06-operations-resilience-and-compliance.md) | Operations, Resilience and Compliance | 4 | 23 | 0 / 4 | `In Review` |
 | [EPIC-07](epics/EPIC-07-performance-and-acceptance-certification.md) | Performance and Acceptance Certification | 3 | 18 | 0 / 3 | `Not Started` |
 | [EPIC-08](epics/EPIC-08-direction-scoping-and-inward-readiness.md) | Direction Scoping and INWARD Readiness | 6 | 34 | 0 / 6 | `Not Started` |
 
@@ -142,10 +142,10 @@ These are unresolved inputs from the BRD, not engineering decisions. Each blocks
 
 | Story | Title | Pri | Est | Acceptance cases | Status | Completed on | Verified by |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| [STORY-06-01](stories/STORY-06-01-audit-retention-archival-and-collection-sharding.md) | Audit retention, archival and collection sharding | Must | 8 | None (operational) | `Not Started` | | |
-| [STORY-06-02](stories/STORY-06-02-observability-and-alerting.md) | Observability and alerting | Must | 5 | None (operational) | `Not Started` | | |
-| [STORY-06-03](stories/STORY-06-03-fail-closed-degradation-and-disaster-recovery-posture.md) | Fail-closed degradation and disaster recovery posture | Must | 5 | UAT 38 | `Not Started` | | |
-| [STORY-06-04](stories/STORY-06-04-data-protection-and-access-control.md) | Data protection and access control | Must | 5 | None (compliance) | `Not Started` | | |
+| [STORY-06-01](stories/STORY-06-01-audit-retention-archival-and-collection-sharding.md) | Audit retention, archival and collection sharding | Must | 8 | None (operational) | `In Review` | | |
+| [STORY-06-02](stories/STORY-06-02-observability-and-alerting.md) | Observability and alerting | Must | 5 | None (operational) | `In Review` | | |
+| [STORY-06-03](stories/STORY-06-03-fail-closed-degradation-and-disaster-recovery-posture.md) | Fail-closed degradation and disaster recovery posture | Must | 5 | UAT 38 | `In Review` | | |
+| [STORY-06-04](stories/STORY-06-04-data-protection-and-access-control.md) | Data protection and access control | Must | 5 | None (compliance) | `In Review` | | |
 
 ### EPIC-07 — Performance and Acceptance Certification
 

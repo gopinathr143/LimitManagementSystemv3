@@ -23,4 +23,7 @@
     <!-- EPIC-05 — Reversal and Reconciliation -->
     <include file="changes/008-reconciliation-queue-collection.xml" relativeToChangelogFile="true"/>
 
+    <!-- EPIC-06 — Operations, Resilience and Compliance -->
+    <include file="changes/009-transactions-archive-collection.xml" relativeToChangelogFile="true"/>
+
 </databaseChangeLog>

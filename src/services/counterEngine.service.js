@@ -83,6 +83,13 @@ export class CounterEngineService {
     this.counterRepository = counterRepository;
     this.configCache = configCache;
     this.hotCounterCache = new HotCounterCache(counterRepository, options.hotCache);
+    // BRD §4.11 AC3 — optional so every existing caller keeps working unwired; when present, every
+    // withTransientRetry call site below reports its per-tier retry/exhaustion counts.
+    this.metricsService = options.metricsService ?? null;
+  }
+
+  #retryHooks(tier) {
+    return this.metricsService?.retryHooksFor(tier) ?? {};
   }
 
   /**
@@ -133,12 +140,13 @@ export class CounterEngineService {
     const amountDelta = txnAmount;
     const countDelta = 1;
 
-    await withTransientRetry(() => this.counterRepository.bootstrap(clientId, key, { clientId, amount: 0, count: 0, createdAt: now, updatedAt: now, expireAt }));
+    const hooks = this.#retryHooks('tier1');
+    await withTransientRetry(() => this.counterRepository.bootstrap(clientId, key, { clientId, amount: 0, count: 0, createdAt: now, updatedAt: now, expireAt }), hooks);
 
     const guardFilter = buildGuardFilter({ thresholdAmount, thresholdCount, amountDelta, countDelta });
     const result = await withTransientRetry(() =>
       this.counterRepository.guardedIncrement(clientId, key, { guardFilter, amountDelta, countDelta, now }),
-    );
+    hooks);
 
     if (result.matchedCount === 1) {
       return { passed: true, appliedKey: key, amountDelta, countDelta };
@@ -167,7 +175,7 @@ export class CounterEngineService {
    * negative.
    */
   async compensateTier1(clientId, appliedKey, { amountDelta, countDelta, now = new Date() }) {
-    const result = await withTransientRetry(() => this.counterRepository.guardedDecrement(clientId, appliedKey, { amountDelta, countDelta, now }));
+    const result = await withTransientRetry(() => this.counterRepository.guardedDecrement(clientId, appliedKey, { amountDelta, countDelta, now }), this.#retryHooks('tier1'));
     return { floorGuardHeld: result.matchedCount === 1 };
   }
 
@@ -216,7 +224,7 @@ export class CounterEngineService {
 
     const shardIndex = Math.floor(Math.random() * shardFactorForWrite);
     const shardKey = `${baseKey}#${shardIndex}`;
-    await withTransientRetry(() => this.counterRepository.incrementShardUnconditional(clientId, shardKey, { amountDelta, countDelta, now, expireAt }));
+    await withTransientRetry(() => this.counterRepository.incrementShardUnconditional(clientId, shardKey, { amountDelta, countDelta, now, expireAt }), this.#retryHooks('tier2'));
 
     return { passed: true, soft: true, appliedKey: shardKey, shardIndex, shardFactorUsed: shardFactorForWrite, amountDelta, countDelta };
   }
@@ -255,7 +263,7 @@ export class CounterEngineService {
       expireAt: rollingExpireAtFor(now),
     });
 
-    const updated = await withTransientRetry(() => this.counterRepository.rollingPipelineUpdate(clientId, key, pipeline));
+    const updated = await withTransientRetry(() => this.counterRepository.rollingPipelineUpdate(clientId, key, pipeline), this.#retryHooks('rolling'));
 
     if (updated._applied) {
       return { passed: true, appliedKey: key, bucketLabel: currentBucketLabel, amountDelta, countDelta };
@@ -275,8 +283,9 @@ export class CounterEngineService {
 
   /** BRD §3.4 — reverses one rolling sub-bucket. A pruned or already-drained bucket reports `floorGuardHeld:false`, the same drift signal a Tier 1 floor-guard failure produces. */
   async compensateRolling(clientId, appliedKey, { bucketLabel, amountDelta, countDelta, now = new Date() }) {
-    const result = await withTransientRetry(() =>
-      this.counterRepository.decrementRollingBucket(clientId, appliedKey, { bucketLabel, amountDelta, countDelta, now }),
+    const result = await withTransientRetry(
+      () => this.counterRepository.decrementRollingBucket(clientId, appliedKey, { bucketLabel, amountDelta, countDelta, now }),
+      this.#retryHooks('rolling'),
     );
     return { floorGuardHeld: result.matchedCount === 1 };
   }
@@ -322,7 +331,7 @@ export class CounterEngineService {
       now,
       expireAt: rollingExpireAtFor(now),
     });
-    await withTransientRetry(() => this.counterRepository.rollingPipelineUpdate(clientId, shardKey, pipeline));
+    await withTransientRetry(() => this.counterRepository.rollingPipelineUpdate(clientId, shardKey, pipeline), this.#retryHooks('rolling-sharded'));
 
     return { passed: true, soft: true, appliedKey: shardKey, shardIndex, shardFactorUsed: shardFactorForWrite, amountDelta, countDelta };
   }

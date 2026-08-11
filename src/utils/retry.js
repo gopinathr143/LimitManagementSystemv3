@@ -23,7 +23,14 @@ function isTransient(error) {
   return TRANSIENT_ERROR_CODES.has(error?.code) || error?.hasErrorLabel?.('TransientTransactionError') === true;
 }
 
-export async function withTransientRetry(fn) {
+/**
+ * `onTransient`/`onExhausted` are optional observability hooks (BRD §4.11
+ * AC3 — "write conflict rate and retry exhaustion rising on a counter
+ * tier... visible per tier"). They carry no behavior of their own; a caller
+ * without a MetricsService simply omits them and retry semantics are
+ * unchanged.
+ */
+export async function withTransientRetry(fn, { onTransient, onExhausted } = {}) {
   for (let attempt = 0; attempt < BACKOFF_MS.length; attempt += 1) {
     try {
       return await fn();
@@ -31,8 +38,16 @@ export async function withTransientRetry(fn) {
       if (!isTransient(error)) {
         throw error;
       }
+      onTransient?.(attempt, error);
       await sleep(BACKOFF_MS[attempt]);
     }
   }
-  return fn();
+  try {
+    return await fn();
+  } catch (error) {
+    if (isTransient(error)) {
+      onExhausted?.(error);
+    }
+    throw error;
+  }
 }

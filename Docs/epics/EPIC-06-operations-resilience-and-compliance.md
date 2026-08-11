@@ -2,7 +2,7 @@
 
 | Field | Value |
 | :--- | :--- |
-| **Status** | `Not Started` |
+| **Status** | `In Review` |
 | **Stories** | 4 |
 | **Total estimate (pts)** | 23 |
 | **Completed** | 0 / 4 |
@@ -19,10 +19,10 @@ The service fails closed under every degraded condition, its data growth is plan
 
 | ID | Title | Priority | Est. | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| [STORY-06-01](../stories/STORY-06-01-audit-retention-archival-and-collection-sharding.md) | Audit retention, archival and collection sharding | Must | 8 | `Not Started` |
-| [STORY-06-02](../stories/STORY-06-02-observability-and-alerting.md) | Observability and alerting | Must | 5 | `Not Started` |
-| [STORY-06-03](../stories/STORY-06-03-fail-closed-degradation-and-disaster-recovery-posture.md) | Fail-closed degradation and disaster recovery posture | Must | 5 | `Not Started` |
-| [STORY-06-04](../stories/STORY-06-04-data-protection-and-access-control.md) | Data protection and access control | Must | 5 | `Not Started` |
+| [STORY-06-01](../stories/STORY-06-01-audit-retention-archival-and-collection-sharding.md) | Audit retention, archival and collection sharding | Must | 8 | `In Review` |
+| [STORY-06-02](../stories/STORY-06-02-observability-and-alerting.md) | Observability and alerting | Must | 5 | `In Review` |
+| [STORY-06-03](../stories/STORY-06-03-fail-closed-degradation-and-disaster-recovery-posture.md) | Fail-closed degradation and disaster recovery posture | Must | 5 | `In Review` |
+| [STORY-06-04](../stories/STORY-06-04-data-protection-and-access-control.md) | Data protection and access control | Must | 5 | `In Review` |
 
 ## Epic exit criteria
 
