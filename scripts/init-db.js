@@ -54,6 +54,65 @@ const configAuditValidator = {
   },
 };
 
+const clientConfigsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['_id', 'clientId', 'configVersion', 'limitsVersion', 'allowedDimensions', 'createdAt', 'updatedAt'],
+    properties: {
+      _id: { bsonType: 'string' },
+      clientId: { bsonType: 'string' },
+      configVersion: { bsonType: 'number', minimum: 1 },
+      limitsVersion: { bsonType: 'number', minimum: 0 },
+      allowedDimensions: { bsonType: 'array' },
+      createdBy: { bsonType: 'string' },
+      updatedBy: { bsonType: 'string' },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' },
+    },
+  },
+};
+
+const limitsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['clientId', 'dimensionCode', 'windowType', 'currency', 'isActive', 'effectiveFrom', 'definitionVersion', 'createdAt', 'updatedAt'],
+    properties: {
+      clientId: { bsonType: 'string' },
+      dimensionCode: { bsonType: 'string' },
+      scope: { bsonType: ['object', 'null'] },
+      windowType: { enum: ['PER_TXN', 'DAILY_CALENDAR', 'DAILY_ROLLING', 'MONTHLY'] },
+      thresholdAmount: { bsonType: ['number', 'null'] },
+      thresholdCount: { bsonType: ['number', 'null'] },
+      currency: { enum: ['INR'] },
+      isActive: { bsonType: 'bool' },
+      effectiveFrom: { bsonType: 'date' },
+      effectiveTo: { bsonType: ['date', 'null'] },
+      definitionVersion: { bsonType: 'number', minimum: 1 },
+      createdBy: { bsonType: 'string' },
+      updatedBy: { bsonType: 'string' },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' },
+    },
+  },
+};
+
+const limitsAuditValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['clientId', 'resource', 'action', 'actor', 'occurredAt'],
+    properties: {
+      clientId: { bsonType: 'string' },
+      resource: { enum: ['REGISTRY', 'LIMIT_DEFINITION'] },
+      action: { bsonType: 'string' },
+      actor: { bsonType: 'string' },
+      definitionVersion: { bsonType: ['number', 'null'] },
+      before: { bsonType: ['object', 'array', 'null'] },
+      after: { bsonType: ['object', 'array', 'null'] },
+      occurredAt: { bsonType: 'date' },
+    },
+  },
+};
+
 async function ensureCollection(db, name, validator) {
   const existing = await db.listCollections({ name }).toArray();
   if (existing.length === 0) {
@@ -78,6 +137,22 @@ export async function initDb(client, dbName = env.mongo.dbName) {
   await db
     .collection('configAudit')
     .createIndex({ clientId: 1, occurredAt: -1 }, { name: 'idx_configAudit_clientId_occurredAt' });
+
+  await ensureCollection(db, 'clientConfigs', clientConfigsValidator);
+  await db
+    .collection('clientConfigs')
+    .createIndex({ clientId: 1 }, { unique: true, name: 'idx_clientConfigs_clientId_unique' });
+
+  await ensureCollection(db, 'limits', limitsValidator);
+  await db
+    .collection('limits')
+    .createIndex({ clientId: 1, dimensionCode: 1, windowType: 1 }, { name: 'idx_limits_clientId_dimensionCode_windowType' });
+  await db.collection('limits').createIndex({ clientId: 1 }, { name: 'idx_limits_clientId' });
+
+  await ensureCollection(db, 'limitsAudit', limitsAuditValidator);
+  await db
+    .collection('limitsAudit')
+    .createIndex({ clientId: 1, occurredAt: -1 }, { name: 'idx_limitsAudit_clientId_occurredAt' });
 }
 
 async function main() {
@@ -85,7 +160,7 @@ async function main() {
   try {
     await client.connect();
     await initDb(client);
-    console.log('Database initialised (clients, configAudit).');
+    console.log('Database initialised (clients, configAudit, clientConfigs, limits, limitsAudit).');
   } finally {
     await client.close();
   }

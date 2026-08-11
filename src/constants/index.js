@@ -9,6 +9,8 @@ export const AUTH_BINDING_TYPE = Object.freeze({
 
 export const AUDIT_RESOURCE = Object.freeze({
   CLIENT: 'CLIENT',
+  REGISTRY: 'REGISTRY',
+  LIMIT_DEFINITION: 'LIMIT_DEFINITION',
 });
 
 export const AUDIT_ACTION = Object.freeze({
@@ -17,9 +19,60 @@ export const AUDIT_ACTION = Object.freeze({
   CLIENT_TIMEZONE_CHANGED: 'CLIENT_TIMEZONE_CHANGED',
   CLIENT_AUTH_ROTATED: 'CLIENT_AUTH_ROTATED',
   CLIENT_UPDATED: 'CLIENT_UPDATED',
+  REGISTRY_CREATED: 'REGISTRY_CREATED',
+  REGISTRY_UPDATED: 'REGISTRY_UPDATED',
+  LIMIT_DEFINITION_CREATED: 'LIMIT_DEFINITION_CREATED',
+  LIMIT_DEFINITION_UPDATED: 'LIMIT_DEFINITION_UPDATED',
+  LIMIT_DEFINITION_DEACTIVATED: 'LIMIT_DEFINITION_DEACTIVATED',
 });
+
+/** BRD §2.2 — every enabled client must carry this dimension with a mandatory Per-Transaction limit (§5). */
+export const GLOBAL_DIMENSION_CODE = 'GLOBAL';
 
 export const PRINCIPAL_ROLE = Object.freeze({
   ADMIN: 'ADMIN',
   TENANT: 'TENANT',
 });
+
+/** BRD §2.3 — the three windows a dimension can *declare* in its registry (§4.3.1). PER_TXN is implicit and never declared (§2.3 "Per-Transaction is never gated"). */
+export const WINDOW_TYPE = Object.freeze({
+  DAILY_CALENDAR: 'DAILY_CALENDAR',
+  DAILY_ROLLING: 'DAILY_ROLLING',
+  MONTHLY: 'MONTHLY',
+});
+
+/** BRD §2.3 item 1 — stateless, implicitly enabled for every dimension, never listed in `windows`. Only appears as a `limits.windowType` value. */
+export const PER_TXN_WINDOW_TYPE = 'PER_TXN';
+
+/** Every windowType a limit definition may target — the declarable three, plus the implicit PER_TXN. */
+export const ALL_LIMIT_WINDOW_TYPES = Object.freeze([PER_TXN_WINDOW_TYPE, ...Object.values(WINDOW_TYPE)]);
+
+/** BRD §4.2.5 — DAILY_ROLLING sub-bucket precision; HOUR is the default, MINUTE for tightly-controlled dimensions. */
+export const ROLLING_GRANULARITY = Object.freeze({
+  HOUR: 'HOUR',
+  MINUTE: 'MINUTE',
+});
+
+/** BRD §4.3.2 — a window's enforcement state, derived from `effectiveAt`/`warming`, never stored as a fixed value (see registry.model.js). */
+export const WINDOW_STATE = Object.freeze({
+  PENDING_ACTIVATION: 'PENDING_ACTIVATION',
+  ACTIVE: 'ACTIVE',
+  WARMING: 'WARMING',
+});
+
+/**
+ * BRD §2.2 — the transaction attributes the engine can extract, for the
+ * OUTWARD registry illustrated in the BRD. This is necessarily a stand-in
+ * ahead of EPIC-04's real transaction schema; registry validation rejects
+ * any dimension attribute outside this set (STORY-02-01 AC3) so a config
+ * naming an attribute the engine cannot extract fails fast at write time
+ * rather than silently going unenforced at request time.
+ */
+export const KNOWN_TRANSACTION_ATTRIBUTES = Object.freeze(['channel', 'ucic', 'accountNumber', 'mcc']);
+
+/** BRD §2.3.2 — IMPS is INR-only in this release; the field is reserved for future multi-currency clients. */
+export const CURRENCY = Object.freeze({
+  INR: 'INR',
+});
+
+export const REGISTRY_DIMENSION_CODE_PATTERN = /^[A-Z0-9_]{1,64}$/;

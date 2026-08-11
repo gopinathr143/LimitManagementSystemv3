@@ -32,7 +32,7 @@ A ticked Definition of Done without recorded evidence does not close a story. An
 | Epic | Title | Stories | Points | Complete | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | [EPIC-01](epics/EPIC-01-tenancy-foundation.md) | Tenancy Foundation | 4 | 24 | 0 / 4 | `In Review` |
-| [EPIC-02](epics/EPIC-02-configuration-dimensions-and-limits.md) | Configuration, Dimensions and Limits | 6 | 34 | 0 / 6 | `Not Started` |
+| [EPIC-02](epics/EPIC-02-configuration-dimensions-and-limits.md) | Configuration, Dimensions and Limits | 6 | 34 | 0 / 6 | `In Review` |
 | [EPIC-03](epics/EPIC-03-counter-engine.md) | Counter Engine | 7 | 45 | 0 / 7 | `Not Started` |
 | [EPIC-04](epics/EPIC-04-transaction-validation-and-idempotency.md) | Transaction Validation and Idempotency | 6 | 39 | 0 / 6 | `Not Started` |
 | [EPIC-05](epics/EPIC-05-reversal-and-reconciliation.md) | Reversal and Reconciliation | 2 | 16 | 0 / 2 | `Not Started` |
@@ -101,12 +101,12 @@ These are unresolved inputs from the BRD, not engineering decisions. Each blocks
 
 | Story | Title | Pri | Est | Acceptance cases | Status | Completed on | Verified by |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| [STORY-02-01](stories/STORY-02-01-per-client-dimension-registry-with-validated-snapshot-loading.md) | Per-client dimension registry with validated snapshot loading | Must | 8 | UAT 25 | `Not Started` | | |
-| [STORY-02-02](stories/STORY-02-02-per-dimension-window-declaration.md) | Per-dimension window declaration | Must | 5 | UAT 41, UAT 42 | `Not Started` | | |
-| [STORY-02-03](stories/STORY-02-03-window-activation-timing-and-warming-state.md) | Window activation timing and warming state | Must | 5 | UAT 43 | `Not Started` | | |
-| [STORY-02-04](stories/STORY-02-04-limit-definition-crud-with-versioning-and-audit.md) | Limit definition CRUD with versioning and audit | Must | 8 | UAT 11, UAT 16, UAT 39 | `Not Started` | | |
-| [STORY-02-05](stories/STORY-02-05-inert-definition-warnings-and-effective-flag.md) | Inert definition warnings and effective flag | Should | 3 | UAT 15, UAT 41 | `Not Started` | | |
-| [STORY-02-06](stories/STORY-02-06-in-process-definition-and-registry-cache-with-invalidation.md) | In-process definition and registry cache with invalidation | Must | 5 | UAT 11 | `Not Started` | | |
+| [STORY-02-01](stories/STORY-02-01-per-client-dimension-registry-with-validated-snapshot-loading.md) | Per-client dimension registry with validated snapshot loading | Must | 8 | UAT 25 | `In Review` | | |
+| [STORY-02-02](stories/STORY-02-02-per-dimension-window-declaration.md) | Per-dimension window declaration | Must | 5 | UAT 41, UAT 42 | `In Progress` | | |
+| [STORY-02-03](stories/STORY-02-03-window-activation-timing-and-warming-state.md) | Window activation timing and warming state | Must | 5 | UAT 43 | `In Progress` | | |
+| [STORY-02-04](stories/STORY-02-04-limit-definition-crud-with-versioning-and-audit.md) | Limit definition CRUD with versioning and audit | Must | 8 | UAT 11, UAT 16, UAT 39 | `In Review` | | |
+| [STORY-02-05](stories/STORY-02-05-inert-definition-warnings-and-effective-flag.md) | Inert definition warnings and effective flag | Should | 3 | UAT 15, UAT 41 | `In Review` | | |
+| [STORY-02-06](stories/STORY-02-06-in-process-definition-and-registry-cache-with-invalidation.md) | In-process definition and registry cache with invalidation | Must | 5 | UAT 11 | `In Progress` | | |
 
 ### EPIC-03 — Counter Engine
 

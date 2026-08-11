@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:mongodb="http://www.liquibase.org/xml/ns/mongodb"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+        http://www.liquibase.org/xml/ns/mongodb
+        http://www.liquibase.org/xml/ns/mongodb/liquibase-mongodb-latest.xsd">
+
+    <!--
+        BRD §4.3 — one versioned dimension-registry snapshot per client.
+        _id IS the clientId, same rationale as `clients` (STORY-01-01):
+        the primary-key index gives lookup for free and there is exactly
+        one document per tenant, so there is no "other tenant" a query
+        against this collection could leak into.
+
+        Direction-scoping (`directions` map, BRD §4.3/§2.1.5) is deliberately
+        NOT in this schema yet — it lands with EPIC-08, alongside the
+        counter engine, per docs/00-INDEX.md's suggested delivery sequence.
+        `allowedDimensions` here is the pre-direction, OUTWARD-implicit shape.
+    -->
+    <changeSet id="001-create-client-configs-collection" author="imps-velocity">
+        <mongodb:createCollection collectionName="clientConfigs">
+            <mongodb:options>
+                {
+                  "validator": {
+                    "$jsonSchema": {
+                      "bsonType": "object",
+                      "required": ["_id", "clientId", "configVersion", "limitsVersion", "allowedDimensions", "createdAt", "updatedAt"],
+                      "properties": {
+                        "_id": { "bsonType": "string", "description": "clientId" },
+                        "clientId": { "bsonType": "string" },
+                        "configVersion": { "bsonType": "number", "minimum": 1 },
+                        "limitsVersion": { "bsonType": "number", "minimum": 0 },
+                        "allowedDimensions": { "bsonType": "array" },
+                        "createdBy": { "bsonType": "string" },
+                        "updatedBy": { "bsonType": "string" },
+                        "createdAt": { "bsonType": "date" },
+                        "updatedAt": { "bsonType": "date" }
+                      }
+                    }
+                  },
+                  "validationLevel": "strict",
+                  "validationAction": "error"
+                }
+            </mongodb:options>
+        </mongodb:createCollection>
+    </changeSet>
+
+    <changeSet id="002-client-configs-unique-clientid-idx" author="imps-velocity">
+        <mongodb:createIndex collectionName="clientConfigs">
+            <mongodb:keys>{ "clientId": 1 }</mongodb:keys>
+            <mongodb:options>{ "unique": true, "name": "idx_clientConfigs_clientId_unique" }</mongodb:options>
+        </mongodb:createIndex>
+    </changeSet>
+
+</databaseChangeLog>

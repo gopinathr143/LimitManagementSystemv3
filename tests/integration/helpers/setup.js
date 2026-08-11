@@ -1,5 +1,6 @@
 import './env.js';
 import { MongoClient } from 'mongodb';
+import request from 'supertest';
 import { env } from '../../../src/config/env.js';
 import { createApp } from '../../../src/app.js';
 import { initDb } from '../../../scripts/init-db.js';
@@ -40,6 +41,19 @@ export async function disconnectTestDb(client) {
 export async function clearCollections(db) {
   await db.collection('clients').deleteMany({});
   await db.collection('configAudit').deleteMany({});
+  await db.collection('clientConfigs').deleteMany({});
+  await db.collection('limits').deleteMany({});
+  await db.collection('limitsAudit').deleteMany({});
+}
+
+/** EPIC-02 helper: onboard a client via HTTP and return its clientId + apiKey, ready for tenant-authenticated calls. */
+export async function createTestClient(app, overrides = {}) {
+  const clientId = overrides.clientId ?? `CLIENT_${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+  const res = await request(app)
+    .post('/clients')
+    .set(adminHeaders())
+    .send({ clientId, name: overrides.name ?? clientId, timezone: overrides.timezone ?? 'Asia/Kolkata' });
+  return { clientId, apiKey: res.body.data.apiKey };
 }
 
 export function adminHeaders() {

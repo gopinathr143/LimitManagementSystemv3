@@ -7,12 +7,21 @@ async function main() {
   const db = await connectToDatabase();
   const app = createApp(db);
 
+  // BRD §4.3 "read at startup"; STORY-02-06 — warm every ACTIVE client's
+  // registry/limits into the in-process cache before accepting traffic,
+  // then keep it fresh via polling so a change on another instance
+  // propagates without a restart.
+  const warmedClientIds = await app.locals.warmConfigCache();
+  logger.info({ count: warmedClientIds.length }, 'Config cache warmed');
+  app.locals.configCache.startPolling();
+
   const server = app.listen(env.port, () => {
     logger.info({ port: env.port, nodeEnv: env.nodeEnv }, 'IMPS Outward Velocity Limit System listening');
   });
 
   const shutdown = async (signal) => {
     logger.info({ signal }, 'Shutting down');
+    app.locals.configCache.stopPolling();
     server.close(async () => {
       await closeDatabase();
       process.exit(0);

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:mongodb="http://www.liquibase.org/xml/ns/mongodb"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+        http://www.liquibase.org/xml/ns/mongodb
+        http://www.liquibase.org/xml/ns/mongodb/liquibase-mongodb-latest.xsd">
+
+    <!--
+        BRD §4.4 — limit definitions. Many documents per client, so this
+        collection (unlike `clients`/`clientConfigs`) is genuinely
+        tenant-owned data and its repository extends TenantScopedRepository
+        (STORY-01-03's structural isolation guard).
+    -->
+    <changeSet id="001-create-limits-collection" author="imps-velocity">
+        <mongodb:createCollection collectionName="limits">
+            <mongodb:options>
+                {
+                  "validator": {
+                    "$jsonSchema": {
+                      "bsonType": "object",
+                      "required": ["clientId", "dimensionCode", "windowType", "currency", "isActive", "effectiveFrom", "definitionVersion", "createdAt", "updatedAt"],
+                      "properties": {
+                        "clientId": { "bsonType": "string" },
+                        "dimensionCode": { "bsonType": "string" },
+                        "scope": { "bsonType": ["object", "null"] },
+                        "windowType": { "enum": ["PER_TXN", "DAILY_CALENDAR", "DAILY_ROLLING", "MONTHLY"] },
+                        "thresholdAmount": { "bsonType": ["number", "null"] },
+                        "thresholdCount": { "bsonType": ["number", "null"] },
+                        "currency": { "enum": ["INR"] },
+                        "isActive": { "bsonType": "bool" },
+                        "effectiveFrom": { "bsonType": "date" },
+                        "effectiveTo": { "bsonType": ["date", "null"] },
+                        "definitionVersion": { "bsonType": "number", "minimum": 1 },
+                        "createdBy": { "bsonType": "string" },
+                        "updatedBy": { "bsonType": "string" },
+                        "createdAt": { "bsonType": "date" },
+                        "updatedAt": { "bsonType": "date" }
+                      }
+                    }
+                  },
+                  "validationLevel": "strict",
+                  "validationAction": "error"
+                }
+            </mongodb:options>
+        </mongodb:createCollection>
+    </changeSet>
+
+    <!-- Primary lookup pattern: "the active limit for this client + dimension + window" (BRD §2.4 step 3.2). -->
+    <changeSet id="002-limits-client-dimension-window-idx" author="imps-velocity">
+        <mongodb:createIndex collectionName="limits">
+            <mongodb:keys>{ "clientId": 1, "dimensionCode": 1, "windowType": 1 }</mongodb:keys>
+            <mongodb:options>{ "name": "idx_limits_clientId_dimensionCode_windowType" }</mongodb:options>
+        </mongodb:createIndex>
+    </changeSet>
+
+    <changeSet id="003-limits-clientid-idx" author="imps-velocity">
+        <mongodb:createIndex collectionName="limits">
+            <mongodb:keys>{ "clientId": 1 }</mongodb:keys>
+            <mongodb:options>{ "name": "idx_limits_clientId" }</mongodb:options>
+        </mongodb:createIndex>
+    </changeSet>
+
+</databaseChangeLog>

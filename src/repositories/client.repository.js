@@ -29,4 +29,9 @@ export class ClientRepository {
   async updateByClientId(clientId, update) {
     return this.collection.findOneAndUpdate({ _id: clientId }, update, { returnDocument: 'after' });
   }
+
+  /** Unpaginated on purpose — used to warm the in-process config cache (STORY-02-06) at startup. */
+  async listActiveClientIds() {
+    return this.collection.distinct('clientId', { status: 'ACTIVE' });
+  }
 }
