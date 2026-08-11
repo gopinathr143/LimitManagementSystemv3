@@ -8,6 +8,7 @@ export const createTransactionRouter = (resolveClientId, transactionController) 
 
   router.post('/', transactionController.submit);
   router.get('/:transactionId', transactionController.getByTransactionId);
+  router.post('/:transactionId/reversal', transactionController.reverse);
 
   return router;
 };

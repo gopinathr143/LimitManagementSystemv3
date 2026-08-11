@@ -35,7 +35,7 @@ A ticked Definition of Done without recorded evidence does not close a story. An
 | [EPIC-02](epics/EPIC-02-configuration-dimensions-and-limits.md) | Configuration, Dimensions and Limits | 6 | 34 | 0 / 6 | `In Review` |
 | [EPIC-03](epics/EPIC-03-counter-engine.md) | Counter Engine | 7 | 45 | 0 / 7 | `In Review` |
 | [EPIC-04](epics/EPIC-04-transaction-validation-and-idempotency.md) | Transaction Validation and Idempotency | 6 | 39 | 0 / 6 | `In Review` |
-| [EPIC-05](epics/EPIC-05-reversal-and-reconciliation.md) | Reversal and Reconciliation | 2 | 16 | 0 / 2 | `Not Started` |
+| [EPIC-05](epics/EPIC-05-reversal-and-reconciliation.md) | Reversal and Reconciliation | 2 | 16 | 0 / 2 | `In Review` |
 | [EPIC-06](epics/EPIC-06-operations-resilience-and-compliance.md) | Operations, Resilience and Compliance | 4 | 23 | 0 / 4 | `Not Started` |
 | [EPIC-07](epics/EPIC-07-performance-and-acceptance-certification.md) | Performance and Acceptance Certification | 3 | 18 | 0 / 3 | `Not Started` |
 | [EPIC-08](epics/EPIC-08-direction-scoping-and-inward-readiness.md) | Direction Scoping and INWARD Readiness | 6 | 34 | 0 / 6 | `Not Started` |
@@ -135,8 +135,8 @@ These are unresolved inputs from the BRD, not engineering decisions. Each blocks
 
 | Story | Title | Pri | Est | Acceptance cases | Status | Completed on | Verified by |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| [STORY-05-01](stories/STORY-05-01-reversal-api-with-ordering-and-floor-guards.md) | Reversal API with ordering and floor guards | Must | 8 | UAT 9, UAT 10, UAT 17, UAT 44 | `Not Started` | | |
-| [STORY-05-02](stories/STORY-05-02-counter-reconciliation-sweeper.md) | Counter reconciliation sweeper | Must | 8 | UAT 36 | `Not Started` | | |
+| [STORY-05-01](stories/STORY-05-01-reversal-api-with-ordering-and-floor-guards.md) | Reversal API with ordering and floor guards | Must | 8 | UAT 9, UAT 10, UAT 17, UAT 44 | `In Review` | | |
+| [STORY-05-02](stories/STORY-05-02-counter-reconciliation-sweeper.md) | Counter reconciliation sweeper | Must | 8 | UAT 36 | `In Review` | | |
 
 ### EPIC-06 — Operations, Resilience and Compliance
 

@@ -18,6 +18,9 @@ async function main() {
   // BRD §3.1.1 — the stale-claim reaper, freeing transactionIds orphaned by a crashed instance.
   app.locals.staleClaimReaperService.start();
 
+  // BRD §3.5 — the reconciliation sweeper: targeted queue draining plus the periodic closed-window pass.
+  app.locals.reconciliationService.start();
+
   const server = app.listen(env.port, () => {
     logger.info({ port: env.port, nodeEnv: env.nodeEnv }, 'IMPS Outward Velocity Limit System listening');
   });
@@ -26,6 +29,7 @@ async function main() {
     logger.info({ signal }, 'Shutting down');
     app.locals.configCache.stopPolling();
     app.locals.staleClaimReaperService.stop();
+    app.locals.reconciliationService.stop();
     server.close(async () => {
       await closeDatabase();
       process.exit(0);

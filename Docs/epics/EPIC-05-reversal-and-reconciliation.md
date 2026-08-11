@@ -2,7 +2,7 @@
 
 | Field | Value |
 | :--- | :--- |
-| **Status** | `Not Started` |
+| **Status** | `In Review` |
 | **Stories** | 2 |
 | **Total estimate (pts)** | 16 |
 | **Completed** | 0 / 2 |
@@ -19,8 +19,8 @@ An approved transaction that fails downstream returns its consumed velocity to t
 
 | ID | Title | Priority | Est. | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| [STORY-05-01](../stories/STORY-05-01-reversal-api-with-ordering-and-floor-guards.md) | Reversal API with ordering and floor guards | Must | 8 | `Not Started` |
-| [STORY-05-02](../stories/STORY-05-02-counter-reconciliation-sweeper.md) | Counter reconciliation sweeper | Must | 8 | `Not Started` |
+| [STORY-05-01](../stories/STORY-05-01-reversal-api-with-ordering-and-floor-guards.md) | Reversal API with ordering and floor guards | Must | 8 | `In Review` |
+| [STORY-05-02](../stories/STORY-05-02-counter-reconciliation-sweeper.md) | Counter reconciliation sweeper | Must | 8 | `In Review` |
 
 ## Epic exit criteria
 
