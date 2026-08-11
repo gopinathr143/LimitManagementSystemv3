@@ -66,3 +66,22 @@ export const CURRENCY = Object.freeze({
 });
 
 export const REGISTRY_DIMENSION_CODE_PATTERN = /^[A-Z0-9_]{1,64}$/;
+
+/** BRD §3.1/§3.2 — the transaction claim's lifecycle. Never deleted, only transitioned (STORY-04-02 AC4). */
+export const TRANSACTION_STATUS = Object.freeze({
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  REVERSED: 'REVERSED',
+  ABANDONED: 'ABANDONED',
+  SYSTEM_FAILURE: 'SYSTEM_FAILURE',
+});
+
+/** A status the claim can never leave — the terminal/resolved states a duplicate submission's response is drawn from verbatim (BRD §3.1 step 3). */
+export const TERMINAL_TRANSACTION_STATUSES = Object.freeze([
+  TRANSACTION_STATUS.APPROVED,
+  TRANSACTION_STATUS.REJECTED,
+  TRANSACTION_STATUS.REVERSED,
+  TRANSACTION_STATUS.ABANDONED,
+  TRANSACTION_STATUS.SYSTEM_FAILURE,
+]);

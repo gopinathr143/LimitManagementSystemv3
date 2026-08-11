@@ -120,6 +120,29 @@ const countersValidator = {
   },
 };
 
+const transactionsValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['_id', 'clientId', 'transactionId', 'status', 'requestData', 'claimedAt', 'updatedAt'],
+    properties: {
+      _id: { bsonType: 'object' },
+      clientId: { bsonType: 'string' },
+      transactionId: { bsonType: 'string' },
+      status: { enum: ['PENDING', 'APPROVED', 'REJECTED', 'REVERSED', 'ABANDONED', 'SYSTEM_FAILURE'] },
+      requestData: { bsonType: 'object' },
+      claimedAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' },
+      resolvedAt: { bsonType: ['date', 'null'] },
+      abandonedAt: { bsonType: ['date', 'null'] },
+      instanceId: { bsonType: ['string', 'null'] },
+      appliedCounterKeys: { bsonType: ['array', 'null'] },
+      rejection: { bsonType: ['object', 'null'] },
+      windowState: { bsonType: ['string', 'null'] },
+      needsReconciliation: { bsonType: ['bool', 'null'] },
+    },
+  },
+};
+
 async function ensureCollection(db, name, validator) {
   const existing = await db.listCollections({ name }).toArray();
   if (existing.length === 0) {
@@ -160,6 +183,10 @@ export async function initDb(client, dbName = env.mongo.dbName) {
   await ensureCollection(db, 'counters', countersValidator);
   await db.collection('counters').createIndex({ expireAt: 1 }, { expireAfterSeconds: 0, name: 'idx_counters_expireAt_ttl' });
   await db.collection('counters').createIndex({ clientId: 1 }, { name: 'idx_counters_clientId' });
+
+  await ensureCollection(db, 'transactions', transactionsValidator);
+  await db.collection('transactions').createIndex({ status: 1, claimedAt: 1 }, { name: 'idx_transactions_status_claimedAt' });
+  await db.collection('transactions').createIndex({ clientId: 1 }, { name: 'idx_transactions_clientId' });
 }
 
 async function main() {
@@ -167,7 +194,7 @@ async function main() {
   try {
     await client.connect();
     await initDb(client);
-    console.log('Database initialised (clients, configAudit, clientConfigs, limits, limitsAudit, counters).');
+    console.log('Database initialised (clients, configAudit, clientConfigs, limits, limitsAudit, counters, transactions).');
   } finally {
     await client.close();
   }

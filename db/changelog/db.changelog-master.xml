@@ -17,4 +17,7 @@
     <!-- EPIC-03 — Counter Engine -->
     <include file="changes/006-counters-collection.xml" relativeToChangelogFile="true"/>
 
+    <!-- EPIC-04 — Transaction Validation and Idempotency -->
+    <include file="changes/007-transactions-collection.xml" relativeToChangelogFile="true"/>
+
 </databaseChangeLog>

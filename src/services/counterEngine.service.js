@@ -85,17 +85,28 @@ export class CounterEngineService {
     this.hotCounterCache = new HotCounterCache(counterRepository, options.hotCache);
   }
 
-  checkPerTransaction(clientId, txnAmount, now = new Date()) {
+  /**
+   * BRD §2.3 "Per-Transaction is never gated... implicitly enabled for
+   * every dimension" — this is called once per dimension in the waterfall,
+   * not only for GLOBAL. GLOBAL is the one BRD §5 makes *mandatory*: a
+   * missing GLOBAL definition fails closed. For every other dimension,
+   * "no definition" means "Unlimited" (§2.3), same as any other window.
+   */
+  checkPerTransaction(clientId, { dimensionCode = GLOBAL_DIMENSION_CODE, attributeMap = {}, txnAmount, now = new Date() }) {
     const definitions = this.configCache.getDefinitions(clientId) ?? [];
-    const definition = findApplicableDefinition(definitions, GLOBAL_DIMENSION_CODE, PER_TXN_WINDOW_TYPE, {}, now);
+    const definition = findApplicableDefinition(definitions, dimensionCode, PER_TXN_WINDOW_TYPE, attributeMap, now);
 
     if (!definition) {
-      return {
-        passed: false,
-        failClosed: true,
-        reason: 'GLOBAL_PER_TXN_MISSING',
-        message: `Client '${clientId}' has no configured Global Per-Transaction limit; failing closed (BRD §5).`,
-      };
+      if (dimensionCode === GLOBAL_DIMENSION_CODE) {
+        return {
+          passed: false,
+          failClosed: true,
+          definitionFound: false,
+          reason: 'GLOBAL_PER_TXN_MISSING',
+          message: `Client '${clientId}' has no configured Global Per-Transaction limit; failing closed (BRD §5).`,
+        };
+      }
+      return { passed: true, failClosed: false, definitionFound: false };
     }
 
     // §2.3.1 — inclusive maxima: permit iff txnAmount <= thresholdAmount.
@@ -103,6 +114,7 @@ export class CounterEngineService {
     return {
       passed,
       failClosed: false,
+      definitionFound: true,
       definitionVersion: definition.definitionVersion,
       breach: passed ? null : { metric: 'AMOUNT', threshold: definition.thresholdAmount, actual: txnAmount },
     };
@@ -251,7 +263,13 @@ export class CounterEngineService {
     return {
       passed: false,
       appliedKey: null,
-      breach: { currentAmount: updated._sumA, currentCount: updated._sumC, thresholdAmount, thresholdCount },
+      breach: {
+        metrics: breachedMetrics({ current: { amount: updated._sumA, count: updated._sumC }, thresholdAmount, thresholdCount, amountDelta, countDelta }),
+        currentAmount: updated._sumA,
+        currentCount: updated._sumC,
+        thresholdAmount,
+        thresholdCount,
+      },
     };
   }
 

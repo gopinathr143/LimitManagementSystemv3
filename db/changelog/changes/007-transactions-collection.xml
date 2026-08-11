@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:mongodb="http://www.liquibase.org/xml/ns/mongodb"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+        http://www.liquibase.org/xml/ns/mongodb
+        http://www.liquibase.org/xml/ns/mongodb/liquibase-mongodb-latest.xsd">
+
+    <!--
+        BRD §3.1/§3.2 — the idempotency claim and system-of-record audit
+        trail. `_id` is the compound `{clientId, transactionId}` object —
+        the primary-key index IS the mutex (STORY-04-01 DoD: "needs no
+        secondary index"). The one secondary index here (status+claimedAt)
+        is justified against a named query pattern per BRD §4.7's index
+        discipline: the stale-claim reaper's periodic scan (STORY-04-02).
+    -->
+    <changeSet id="001-create-transactions-collection" author="imps-velocity">
+        <mongodb:createCollection collectionName="transactions">
+            <mongodb:options>
+                {
+                  "validator": {
+                    "$jsonSchema": {
+                      "bsonType": "object",
+                      "required": ["_id", "clientId", "transactionId", "status", "requestData", "claimedAt", "updatedAt"],
+                      "properties": {
+                        "_id": { "bsonType": "object" },
+                        "clientId": { "bsonType": "string" },
+                        "transactionId": { "bsonType": "string" },
+                        "status": { "enum": ["PENDING", "APPROVED", "REJECTED", "REVERSED", "ABANDONED", "SYSTEM_FAILURE"] },
+                        "requestData": { "bsonType": "object" },
+                        "claimedAt": { "bsonType": "date" },
+                        "updatedAt": { "bsonType": "date" },
+                        "resolvedAt": { "bsonType": ["date", "null"] },
+                        "abandonedAt": { "bsonType": ["date", "null"] },
+                        "instanceId": { "bsonType": ["string", "null"] },
+                        "appliedCounterKeys": { "bsonType": ["array", "null"] },
+                        "rejection": { "bsonType": ["object", "null"] },
+                        "windowState": { "bsonType": ["string", "null"] },
+                        "needsReconciliation": { "bsonType": ["bool", "null"] }
+                      }
+                    }
+                  },
+                  "validationLevel": "strict",
+                  "validationAction": "error"
+                }
+            </mongodb:options>
+        </mongodb:createCollection>
+    </changeSet>
+
+    <changeSet id="002-transactions-reaper-scan-idx" author="imps-velocity">
+        <mongodb:createIndex collectionName="transactions">
+            <mongodb:keys>{ "status": 1, "claimedAt": 1 }</mongodb:keys>
+            <mongodb:options>{ "name": "idx_transactions_status_claimedAt" }</mongodb:options>
+        </mongodb:createIndex>
+    </changeSet>
+
+    <changeSet id="003-transactions-clientid-idx" author="imps-velocity">
+        <mongodb:createIndex collectionName="transactions">
+            <mongodb:keys>{ "clientId": 1 }</mongodb:keys>
+            <mongodb:options>{ "name": "idx_transactions_clientId" }</mongodb:options>
+        </mongodb:createIndex>
+    </changeSet>
+
+</databaseChangeLog>

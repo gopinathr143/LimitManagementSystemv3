@@ -3,7 +3,7 @@
 | Field | Value |
 | :--- | :--- |
 | **Epic** | [EPIC-04 — Transaction Validation and Idempotency](../epics/EPIC-04-transaction-validation-and-idempotency.md) |
-| **Status** | `Not Started` |
+| **Status** | `In Review` |
 | **Priority** | Must |
 | **Estimate (pts)** | 5 |
 | **BRD reference** | Section 3.1.1 |
@@ -30,12 +30,12 @@ A process that crashes mid-waterfall leaves an orphaned pending claim that would
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria below pass in a shared (non-local) environment
-- [ ] Unit tests cover every AC branch, including the negative/failure path
-- [ ] Integration test runs against a real MongoDB replica set (not an in-memory mock)
+- [ ] All Acceptance Criteria below pass in a shared (non-local) environment — passing locally against a real MongoDB replica set; not yet run in a shared/CI environment
+- [x] Unit tests cover every AC branch, including the negative/failure path — covered via integration tests directly against real Mongo (no separate unit-level fakes needed; the reaper's logic is entirely query/guarded-update based, not meaningfully separable from the database)
+- [x] Integration test runs against a real MongoDB replica set (not an in-memory mock) — `tests/integration/staleClaimReaper.test.js`
 - [ ] Code reviewed and approved by a second engineer
-- [ ] Structured logs and metrics emitted per Section 4.11 of the BRD
-- [ ] BRD section updated if implementation diverged from the written design
+- [ ] Structured logs and metrics emitted per Section 4.11 of the BRD — reaper volume is logged per abandoned claim (`src/services/staleClaimReaper.service.js`); §4.11's "stale-PENDING reaper volume" metric is not yet wired to a metrics emitter (see EPIC-01/02/03 DoD notes)
+- [x] BRD section updated if implementation diverged from the written design — no divergence; `needsReconciliation: true` added to the abandoned document as the explicit hand-off point BRD §3.5 describes, ahead of EPIC-05's reconciliation sweeper existing to consume it
 
 ## How to treat this story as complete
 
@@ -43,9 +43,9 @@ A story is **Done** only when every row below has recorded evidence. A ticked De
 
 | Check | Evidence required | Link / reference | Verified by |
 | :--- | :--- | :--- | :--- |
-| Crash recovery test | UAT 35 result showing retry accepted after reaping | | |
-| Non-interference test | Result showing healthy in-flight requests are not reaped | | |
+| Crash recovery test | UAT 35 result showing retry accepted after reaping | `tests/integration/staleClaimReaper.test.js` — "AC1/UAT 35: a claim older than the staleness threshold is abandoned, freeing the transactionId for a fresh retry" | |
+| Non-interference test | Result showing healthy in-flight requests are not reaped | `tests/integration/staleClaimReaper.test.js` — "AC3: a healthy in-flight claim within the threshold is left untouched" and "a claim that resolves normally between the reaper scan and its write is left untouched (guarded transition)" | |
 
 ## Notes / Risks
 
-_None recorded._
+**Reconciliation referral (AC2) is a hand-off, not a repair.** EPIC-05's reconciliation sweeper (STORY-05-02) does not exist yet, so an abandoned claim's `needsReconciliation: true` flag is currently only a marker — nothing consumes it to actually repair orphaned counter increments. This is the intended interim state per the BRD's own epic sequencing (EPIC-04 before EPIC-05); the flag is the contract EPIC-05 will query against.

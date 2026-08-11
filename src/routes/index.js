@@ -2,8 +2,9 @@ import { Router } from 'express';
 import { createClientRouter } from './client.routes.js';
 import { createRegistryRouter } from './registry.routes.js';
 import { createLimitDefinitionRouter } from './limitDefinition.routes.js';
+import { createTransactionRouter } from './transaction.routes.js';
 
-export const createApiRouter = ({ resolveClientId, clientController, registryController, limitDefinitionController }) => {
+export const createApiRouter = ({ resolveClientId, clientController, registryController, limitDefinitionController, transactionController }) => {
   const router = Router();
 
   router.get('/health', (req, res) => res.status(200).json({ success: true, data: { status: 'UP' } }));
@@ -13,6 +14,7 @@ export const createApiRouter = ({ resolveClientId, clientController, registryCon
   // purely about correct route matching).
   router.use('/clients/:clientId/dimensions', createRegistryRouter(resolveClientId, registryController));
   router.use('/clients/:clientId/limits', createLimitDefinitionRouter(resolveClientId, limitDefinitionController));
+  router.use('/clients/:clientId/transactions', createTransactionRouter(resolveClientId, transactionController));
 
   router.use('/clients', createClientRouter(clientController));
 

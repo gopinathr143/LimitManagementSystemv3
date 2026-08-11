@@ -2,7 +2,7 @@
 
 | Field | Value |
 | :--- | :--- |
-| **Status** | `Not Started` |
+| **Status** | `In Review` |
 | **Stories** | 6 |
 | **Total estimate (pts)** | 39 |
 | **Completed** | 0 / 6 |
@@ -19,12 +19,12 @@ A duplicate or retried transaction can never double-count a counter, a breach is
 
 | ID | Title | Priority | Est. | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| [STORY-04-01](../stories/STORY-04-01-pending-claim-idempotency-mutex.md) | Pending claim idempotency mutex | Must | 8 | `Not Started` |
-| [STORY-04-02](../stories/STORY-04-02-stale-pending-claim-reaper.md) | Stale pending claim reaper | Must | 5 | `Not Started` |
-| [STORY-04-03](../stories/STORY-04-03-config-driven-validation-waterfall.md) | Config-driven validation waterfall | Must | 8 | `Not Started` |
-| [STORY-04-04](../stories/STORY-04-04-compensating-saga-with-correct-retry-classification.md) | Compensating saga with correct retry classification | Must | 8 | `Not Started` |
-| [STORY-04-05](../stories/STORY-04-05-audit-record-and-rejection-detail-capture.md) | Audit record and rejection detail capture | Must | 5 | `Not Started` |
-| [STORY-04-06](../stories/STORY-04-06-client-timezone-windows-and-clock-skew-control.md) | Client timezone windows and clock skew control | Must | 5 | `Not Started` |
+| [STORY-04-01](../stories/STORY-04-01-pending-claim-idempotency-mutex.md) | Pending claim idempotency mutex | Must | 8 | `In Review` |
+| [STORY-04-02](../stories/STORY-04-02-stale-pending-claim-reaper.md) | Stale pending claim reaper | Must | 5 | `In Review` |
+| [STORY-04-03](../stories/STORY-04-03-config-driven-validation-waterfall.md) | Config-driven validation waterfall | Must | 8 | `In Review` |
+| [STORY-04-04](../stories/STORY-04-04-compensating-saga-with-correct-retry-classification.md) | Compensating saga with correct retry classification | Must | 8 | `In Review` |
+| [STORY-04-05](../stories/STORY-04-05-audit-record-and-rejection-detail-capture.md) | Audit record and rejection detail capture | Must | 5 | `In Review` |
+| [STORY-04-06](../stories/STORY-04-06-client-timezone-windows-and-clock-skew-control.md) | Client timezone windows and clock skew control | Must | 5 | `In Progress` |
 
 ## Epic exit criteria
 
