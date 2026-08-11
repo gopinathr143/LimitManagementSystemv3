@@ -3,7 +3,7 @@
 | Field | Value |
 | :--- | :--- |
 | **Epic** | [EPIC-03 — Counter Engine](../epics/EPIC-03-counter-engine.md) |
-| **Status** | `Not Started` |
+| **Status** | `In Review` |
 | **Priority** | Must |
 | **Estimate (pts)** | 3 |
 | **BRD reference** | Section 4.2.0, 2.3.1, 5 |
@@ -30,12 +30,12 @@ Per-transaction limits require no counter and no write, so the mandatory Global 
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria below pass in a shared (non-local) environment
-- [ ] Unit tests cover every AC branch, including the negative/failure path
-- [ ] Integration test runs against a real MongoDB replica set (not an in-memory mock)
+- [ ] All Acceptance Criteria below pass in a shared (non-local) environment — passing locally; not yet run in a shared/CI environment
+- [x] Unit tests cover every AC branch, including the negative/failure path — `tests/unit/counterEngine.tier0.test.js`
+- [ ] Integration test runs against a real MongoDB replica set (not an in-memory mock) — not applicable: Tier 0 is defined by having zero I/O (see zero-write proof below); there is nothing for a real-database integration test to add over the unit tests, which already exercise the real `findApplicableDefinition` cache-lookup logic from EPIC-02
 - [ ] Code reviewed and approved by a second engineer
-- [ ] Structured logs and metrics emitted per Section 4.11 of the BRD
-- [ ] BRD section updated if implementation diverged from the written design
+- [ ] Structured logs and metrics emitted per Section 4.11 of the BRD — decision counters not yet wired (see EPIC-01/02 DoD notes); this is genuinely a metrics gap since Tier 0 rejections are exactly the kind of decision §4.11 wants counted
+- [ ] BRD section updated if implementation diverged from the written design — no divergence identified
 
 ## How to treat this story as complete
 
@@ -43,10 +43,10 @@ A story is **Done** only when every row below has recorded evidence. A ticked De
 
 | Check | Evidence required | Link / reference | Verified by |
 | :--- | :--- | :--- | :--- |
-| Boundary test | UAT 33 result for exactly-at-threshold and one unit over | | |
-| Fail-closed test | UAT 13 result for a missing mandatory cap | | |
-| Zero-write proof | Instrumentation showing no counter operation on a per-transaction rejection | | |
+| Boundary test | UAT 33 result for exactly-at-threshold and one unit over | `tests/unit/counterEngine.tier0.test.js` — "AC2: an amount exactly at the threshold is approved" / "one paisa over the threshold is rejected" | |
+| Fail-closed test | UAT 13 result for a missing mandatory cap | `tests/unit/counterEngine.tier0.test.js` — "AC3: a missing Global Per-Transaction definition fails closed" (and the inactive-definition variant) | |
+| Zero-write proof | Instrumentation showing no counter operation on a per-transaction rejection | `tests/unit/counterEngine.tier0.test.js` — "AC1/zero-I/O" constructs the service with `counterRepository: null` and still passes, proving no code path in `checkPerTransaction` can touch a repository | |
 
 ## Notes / Risks
 
-_None recorded._
+`checkPerTransaction` reads only the in-process definitions cache (STORY-02-06) and performs a pure comparison — there is no counter document, no read, no write, for this check at any traffic level. AC4 ("cannot be bypassed") is a property of call ordering in the future validation waterfall (EPIC-04): this check must run first and unconditionally, which this story's function signature enables but cannot itself enforce — that enforcement belongs to EPIC-04.

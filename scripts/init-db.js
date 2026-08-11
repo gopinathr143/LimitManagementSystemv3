@@ -103,6 +103,23 @@ const limitsAuditValidator = {
   },
 };
 
+const countersValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['_id', 'clientId', 'expireAt'],
+    properties: {
+      _id: { bsonType: 'string' },
+      clientId: { bsonType: 'string' },
+      amount: { bsonType: ['number', 'null'] },
+      count: { bsonType: ['number', 'null'] },
+      buckets: { bsonType: ['object', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' },
+      expireAt: { bsonType: 'date' },
+    },
+  },
+};
+
 async function ensureCollection(db, name, validator) {
   const existing = await db.listCollections({ name }).toArray();
   if (existing.length === 0) {
@@ -139,6 +156,10 @@ export async function initDb(client, dbName = env.mongo.dbName) {
   await db
     .collection('limitsAudit')
     .createIndex({ clientId: 1, occurredAt: -1 }, { name: 'idx_limitsAudit_clientId_occurredAt' });
+
+  await ensureCollection(db, 'counters', countersValidator);
+  await db.collection('counters').createIndex({ expireAt: 1 }, { expireAfterSeconds: 0, name: 'idx_counters_expireAt_ttl' });
+  await db.collection('counters').createIndex({ clientId: 1 }, { name: 'idx_counters_clientId' });
 }
 
 async function main() {
@@ -146,7 +167,7 @@ async function main() {
   try {
     await client.connect();
     await initDb(client);
-    console.log('Database initialised (clients, configAudit, clientConfigs, limits, limitsAudit).');
+    console.log('Database initialised (clients, configAudit, clientConfigs, limits, limitsAudit, counters).');
   } finally {
     await client.close();
   }

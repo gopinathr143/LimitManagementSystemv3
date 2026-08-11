@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:mongodb="http://www.liquibase.org/xml/ns/mongodb"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+        http://www.liquibase.org/xml/ns/mongodb
+        http://www.liquibase.org/xml/ns/mongodb/liquibase-mongodb-latest.xsd">
+
+    <!--
+        BRD §4.2 — velocity counters. `_id` is the programmatically-built key
+        (always leads with clientId, §4.2); `clientId` is also stored as a
+        plain field (§4.2 "clientId is also stored as a field") so per-client
+        scans/exports don't need to parse `_id`. Two document shapes share
+        this collection: Tier 0/1/2 bucketed counters (`amount`/`count`) and
+        the rolling-window per-entity document (`buckets`, §4.2.5) — kept
+        loosely validated rather than split, since both are the same
+        conceptual "velocity counter" and splitting would duplicate the TTL
+        index and client-scoping logic for no real benefit.
+    -->
+    <changeSet id="001-create-counters-collection" author="imps-velocity">
+        <mongodb:createCollection collectionName="counters">
+            <mongodb:options>
+                {
+                  "validator": {
+                    "$jsonSchema": {
+                      "bsonType": "object",
+                      "required": ["_id", "clientId", "expireAt"],
+                      "properties": {
+                        "_id": { "bsonType": "string" },
+                        "clientId": { "bsonType": "string" },
+                        "amount": { "bsonType": ["number", "null"] },
+                        "count": { "bsonType": ["number", "null"] },
+                        "buckets": { "bsonType": ["object", "null"] },
+                        "createdAt": { "bsonType": "date" },
+                        "updatedAt": { "bsonType": "date" },
+                        "expireAt": { "bsonType": "date" }
+                      }
+                    }
+                  },
+                  "validationLevel": "strict",
+                  "validationAction": "error"
+                }
+            </mongodb:options>
+        </mongodb:createCollection>
+    </changeSet>
+
+    <!-- BRD §4.2 — "A TTL index on expireAt auto-cleans past-window documents." No application cleanup job. -->
+    <changeSet id="002-counters-ttl-idx" author="imps-velocity">
+        <mongodb:createIndex collectionName="counters">
+            <mongodb:keys>{ "expireAt": 1 }</mongodb:keys>
+            <mongodb:options>{ "expireAfterSeconds": 0, "name": "idx_counters_expireAt_ttl" }</mongodb:options>
+        </mongodb:createIndex>
+    </changeSet>
+
+    <changeSet id="003-counters-clientid-idx" author="imps-velocity">
+        <mongodb:createIndex collectionName="counters">
+            <mongodb:keys>{ "clientId": 1 }</mongodb:keys>
+            <mongodb:options>{ "name": "idx_counters_clientId" }</mongodb:options>
+        </mongodb:createIndex>
+    </changeSet>
+
+</databaseChangeLog>
