@@ -37,7 +37,7 @@ A ticked Definition of Done without recorded evidence does not close a story. An
 | [EPIC-04](epics/EPIC-04-transaction-validation-and-idempotency.md) | Transaction Validation and Idempotency | 6 | 39 | 0 / 6 | `In Review` |
 | [EPIC-05](epics/EPIC-05-reversal-and-reconciliation.md) | Reversal and Reconciliation | 2 | 16 | 0 / 2 | `In Review` |
 | [EPIC-06](epics/EPIC-06-operations-resilience-and-compliance.md) | Operations, Resilience and Compliance | 4 | 23 | 0 / 4 | `In Review` |
-| [EPIC-07](epics/EPIC-07-performance-and-acceptance-certification.md) | Performance and Acceptance Certification | 3 | 18 | 0 / 3 | `Not Started` |
+| [EPIC-07](epics/EPIC-07-performance-and-acceptance-certification.md) | Performance and Acceptance Certification | 3 | 18 | 0 / 3 | `In Review` |
 | [EPIC-08](epics/EPIC-08-direction-scoping-and-inward-readiness.md) | Direction Scoping and INWARD Readiness | 6 | 34 | 0 / 6 | `Not Started` |
 
 ---
@@ -151,9 +151,9 @@ These are unresolved inputs from the BRD, not engineering decisions. Each blocks
 
 | Story | Title | Pri | Est | Acceptance cases | Status | Completed on | Verified by |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| [STORY-07-01](stories/STORY-07-01-sustained-throughput-and-latency-certification.md) | Sustained throughput and latency certification | Must | 8 | UAT 5 | `Not Started` | | |
-| [STORY-07-02](stories/STORY-07-02-hot-counter-concurrency-certification.md) | Hot counter concurrency certification | Must | 5 | UAT 19, UAT 22 | `Not Started` | | |
-| [STORY-07-03](stories/STORY-07-03-formal-uat-execution-pack.md) | Formal UAT execution pack | Must | 5 | UAT 1 to UAT 44 | `Not Started` | | |
+| [STORY-07-01](stories/STORY-07-01-sustained-throughput-and-latency-certification.md) | Sustained throughput and latency certification | Must | 8 | UAT 5 | `In Review` | | |
+| [STORY-07-02](stories/STORY-07-02-hot-counter-concurrency-certification.md) | Hot counter concurrency certification | Must | 5 | UAT 19, UAT 22 | `In Review` | | |
+| [STORY-07-03](stories/STORY-07-03-formal-uat-execution-pack.md) | Formal UAT execution pack | Must | 5 | UAT 1 to UAT 44 | `In Review` | | |
 
 ### EPIC-08 — Direction Scoping and INWARD Readiness
 

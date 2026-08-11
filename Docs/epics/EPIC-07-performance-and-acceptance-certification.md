@@ -2,7 +2,7 @@
 
 | Field | Value |
 | :--- | :--- |
-| **Status** | `Not Started` |
+| **Status** | `In Review` |
 | **Stories** | 3 |
 | **Total estimate (pts)** | 18 |
 | **Completed** | 0 / 3 |
@@ -19,9 +19,9 @@ The 1000 RPS target and the sub-100ms internal budget are demonstrated rather th
 
 | ID | Title | Priority | Est. | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| [STORY-07-01](../stories/STORY-07-01-sustained-throughput-and-latency-certification.md) | Sustained throughput and latency certification | Must | 8 | `Not Started` |
-| [STORY-07-02](../stories/STORY-07-02-hot-counter-concurrency-certification.md) | Hot counter concurrency certification | Must | 5 | `Not Started` |
-| [STORY-07-03](../stories/STORY-07-03-formal-uat-execution-pack.md) | Formal UAT execution pack | Must | 5 | `Not Started` |
+| [STORY-07-01](../stories/STORY-07-01-sustained-throughput-and-latency-certification.md) | Sustained throughput and latency certification | Must | 8 | `In Review` |
+| [STORY-07-02](../stories/STORY-07-02-hot-counter-concurrency-certification.md) | Hot counter concurrency certification | Must | 5 | `In Review` |
+| [STORY-07-03](../stories/STORY-07-03-formal-uat-execution-pack.md) | Formal UAT execution pack | Must | 5 | `In Review` |
 
 ## Epic exit criteria
 
