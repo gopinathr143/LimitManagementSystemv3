@@ -38,7 +38,9 @@
                         "appliedCounterKeys": { "bsonType": ["array", "null"] },
                         "rejection": { "bsonType": ["object", "null"] },
                         "windowState": { "bsonType": ["string", "null"] },
-                        "needsReconciliation": { "bsonType": ["bool", "null"] }
+                        "needsReconciliation": { "bsonType": ["bool", "null"] },
+                        "reversedAt": { "bsonType": ["date", "null"] },
+                        "reversalReason": { "bsonType": ["string", "null"] }
                       }
                     }
                   },

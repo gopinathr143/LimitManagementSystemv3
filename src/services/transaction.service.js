@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { validateTransactionRequest, buildClaimDocument, extractAttributeMap, attributeMapToOrderedValues } from '../models/transaction.model.js';
-import { deriveWindowState, isWindowEnforced } from '../models/registry.model.js';
+import { deriveWindowState, isWindowEnforced, findDimension } from '../models/registry.model.js';
 import { findApplicableDefinition } from '../models/limitDefinition.model.js';
 import { TRANSACTION_STATUS, TERMINAL_TRANSACTION_STATUSES, WINDOW_TYPE, WINDOW_STATE } from '../constants/index.js';
 import { AppError } from '../utils/AppError.js';
@@ -21,6 +21,9 @@ export class TransactionService {
     this.configCache = configCache;
     this.counterEngineService = counterEngineService;
     this.instanceId = options.instanceId ?? randomUUID();
+    // BRD §3.5 — optional so EPIC-04 (built before the sweeper existed) keeps working unwired; when present, every
+    // floor-guard failure (saga rollback or reversal) is queued for targeted reconciliation, not just logged.
+    this.reconciliationService = options.reconciliationService ?? null;
   }
 
   /** BRD §3.1 — the mutex. `timezone` is the client's (already resolved by `resolveClientId` middleware — no extra lookup here). Returns a uniform `{httpStatus, body}`. */
@@ -44,7 +47,7 @@ export class TransactionService {
       resolveResult = await this.transactionRepository.resolve(clientId, transactionId, resolveFields);
     } catch (error) {
       // BRD §3.3 step 5 — the resolve write itself failed after retries: compensate everything applied and fail closed.
-      await this.#compensateAll(clientId, outcome.appliedCounterKeys ?? []);
+      await this.#compensateAll(clientId, outcome.appliedCounterKeys ?? [], transactionId);
       await this.transactionRepository
         .resolve(clientId, transactionId, { status: TRANSACTION_STATUS.SYSTEM_FAILURE, updatedAt: now, resolvedAt: now })
         .catch((innerError) => logger.error({ err: innerError, clientId, transactionId }, 'Best-effort SYSTEM_FAILURE resolve also failed'));
@@ -66,6 +69,100 @@ export class TransactionService {
       throw AppError.notFound(`Transaction '${transactionId}' not found for client '${clientId}'.`, 'TRANSACTION_NOT_FOUND');
     }
     return this.#toResponseData(transactionId, doc);
+  }
+
+  /**
+   * BRD §3.4 — reverse an approved transaction. Ordering per the BRD: the
+   * status flip is attempted FIRST (`reverseIfApproved`'s guarded
+   * `findOneAndUpdate`), and only when it actually matched are any counters
+   * touched — this is what makes two concurrent reversal calls resolve to
+   * exactly one of them decrementing anything (AC3). A flip that doesn't
+   * match is not necessarily an error: it's the same idempotent-replay shape
+   * used by `submit()` for `AC2`, applied to reversal instead of approval.
+   */
+  async reverseTransaction(clientId, transactionId, reason, now = new Date()) {
+    const flipped = await this.transactionRepository.reverseIfApproved(clientId, transactionId, { reason, now });
+
+    if (!flipped) {
+      const existing = await this.transactionRepository.findByTransactionId(clientId, transactionId);
+      if (!existing) {
+        throw AppError.notFound(`Transaction '${transactionId}' not found for client '${clientId}'.`, 'TRANSACTION_NOT_FOUND');
+      }
+      if (existing.status === TRANSACTION_STATUS.REVERSED) {
+        // AC2 — a repeated reversal call is a no-op, not an error; no counter is touched a second time.
+        return { httpStatus: 200, body: { success: true, data: { transactionId, status: TRANSACTION_STATUS.REVERSED, alreadyReversed: true } } };
+      }
+      return {
+        httpStatus: 409,
+        body: {
+          success: false,
+          error: {
+            code: 'TRANSACTION_NOT_REVERSIBLE',
+            message: `Transaction '${transactionId}' has status '${existing.status}'; only an APPROVED transaction can be reversed.`,
+          },
+        },
+      };
+    }
+
+    logger.info({ clientId, transactionId }, 'Transaction reversal claimed; decrementing applied counters');
+    const registry = this.configCache.getRegistry(clientId);
+    const reversedCounters = await this.#reverseAppliedKeys(clientId, transactionId, flipped.appliedCounterKeys ?? [], registry, now);
+
+    return { httpStatus: 200, body: { success: true, data: { transactionId, status: TRANSACTION_STATUS.REVERSED, reversedCounters } } };
+  }
+
+  /**
+   * BRD §3.4 step 2 — for each recorded key: skip (no-op, logged) if the
+   * dimension or that window was de-activated in the registry since
+   * approval (AC5); otherwise decrement the exact recorded document/bucket
+   * via the SAME compensation primitive the saga rollback uses (STORY-04-04
+   * — reversal is a second consumer of that already-proven contract, per
+   * STORY-04-05's notes). A failed floor guard (AC6) is a drift signal, not
+   * a silently swallowed failure.
+   */
+  async #reverseAppliedKeys(clientId, transactionId, appliedKeys, registry, now) {
+    const results = [];
+    for (let i = appliedKeys.length - 1; i >= 0; i -= 1) {
+      const applied = appliedKeys[i];
+      if (!this.#isCounterKeyGoverned(registry, applied.dimensionCode, applied.windowType)) {
+        logger.info(
+          { clientId, transactionId, appliedKey: applied.key, dimensionCode: applied.dimensionCode, windowType: applied.windowType },
+          'Reversal skipped: dimension/window no longer governed by the registry',
+        );
+        results.push({ key: applied.key, skipped: true, reason: 'NOT_GOVERNED' });
+        continue;
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      const result = await this.#compensateOne(clientId, applied);
+      if (!result.floorGuardHeld) {
+        logger.error({ clientId, transactionId, appliedKey: applied.key, tier: applied.tier }, 'Reversal floor guard failed — drift signal for reconciliation');
+        // eslint-disable-next-line no-await-in-loop
+        await this.#queueDrift(clientId, transactionId, applied, 'REVERSAL_FLOOR_GUARD_FAILED');
+      }
+      results.push({ key: applied.key, skipped: false, floorGuardHeld: result.floorGuardHeld });
+    }
+    return results;
+  }
+
+  /** BRD §3.4 step 2 — governed means the dimension is still in the registry AND still declares this window; either being removed means the counter is no longer runtime-governed and reversal must not touch it (§4.4 "de-activation... reversal skips them"). */
+  #isCounterKeyGoverned(registry, dimensionCode, windowType) {
+    const dimension = findDimension(registry, dimensionCode);
+    if (!dimension) {
+      return false;
+    }
+    return Boolean(dimension.windows?.[windowType]);
+  }
+
+  async #queueDrift(clientId, transactionId, applied, reason) {
+    if (!this.reconciliationService) {
+      return;
+    }
+    try {
+      await this.reconciliationService.queueDrift(clientId, { ...applied, sourceTransactionId: transactionId, reason });
+    } catch (error) {
+      logger.error({ err: error, clientId, transactionId, appliedKey: applied.key }, 'Failed to queue drift signal for reconciliation');
+    }
   }
 
   #responseForExisting(existing) {
@@ -131,7 +228,7 @@ export class TransactionService {
 
       const perTxnResult = this.counterEngineService.checkPerTransaction(clientId, { dimensionCode: dimension.code, attributeMap, txnAmount: amount, now });
       if (!perTxnResult.passed) {
-        await this.#compensateAll(clientId, appliedKeys);
+        await this.#compensateAll(clientId, appliedKeys, transactionId);
         return {
           status: TRANSACTION_STATUS.REJECTED,
           rejection: {
@@ -171,7 +268,7 @@ export class TransactionService {
 
         if (!result.passed) {
           // eslint-disable-next-line no-await-in-loop
-          await this.#compensateAll(clientId, appliedKeys);
+          await this.#compensateAll(clientId, appliedKeys, transactionId);
           return {
             status: TRANSACTION_STATUS.REJECTED,
             rejection: {
@@ -249,14 +346,16 @@ export class TransactionService {
     return this.counterEngineService.checkAndIncrementTier1(clientId, { dimensionCode: dimension.code, windowType, attributeValues: orderedValues, timezone, ...common });
   }
 
-  /** BRD §3.3 step 3 — compensate in reverse order. A compensation that fails (floor guard) is logged as a drift signal, never silently dropped (§3.4/§3.5 — repaired by reconciliation, EPIC-05). */
-  async #compensateAll(clientId, appliedKeys) {
+  /** BRD §3.3 step 3 — compensate in reverse order. A compensation that fails (floor guard) is logged as a drift signal and queued for reconciliation, never silently dropped (§3.4/§3.5). */
+  async #compensateAll(clientId, appliedKeys, transactionId) {
     for (let i = appliedKeys.length - 1; i >= 0; i -= 1) {
       const applied = appliedKeys[i];
       // eslint-disable-next-line no-await-in-loop
       const result = await this.#compensateOne(clientId, applied);
       if (!result.floorGuardHeld) {
         logger.error({ clientId, appliedKey: applied.key, tier: applied.tier }, 'Compensation floor guard failed — drift signal for reconciliation');
+        // eslint-disable-next-line no-await-in-loop
+        await this.#queueDrift(clientId, transactionId, applied, 'COMPENSATION_FLOOR_GUARD_FAILED');
       }
     }
   }

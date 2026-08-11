@@ -1,5 +1,5 @@
 import { TenantScopedRepository } from './base.repository.js';
-import { PRIMARY_READ_OPTS, HOT_PATH_WRITE_OPTS } from '../config/database.js';
+import { PRIMARY_READ_OPTS, HOT_PATH_WRITE_OPTS, MAJORITY_WRITE_OPTS } from '../config/database.js';
 
 const MONGO_DUPLICATE_KEY = 11000;
 
@@ -165,5 +165,31 @@ export class CounterRepository extends TenantScopedRepository {
       { $inc: { [`buckets.${bucketLabel}.a`]: -amountDelta, [`buckets.${bucketLabel}.c`]: -countDelta }, $set: { updatedAt: now } },
       { upsert: false, ...HOT_PATH_WRITE_OPTS },
     );
+  }
+
+  /**
+   * BRD §3.5 "a full nightly pass per closed window" — a flat (non-rolling)
+   * counter document whose window has already closed (`now >= expireAt`) is
+   * eligible for the general sweep. Rolling documents (identified by the
+   * presence of a `buckets` field) are deliberately excluded: a rolling
+   * window is a continuous 24h sliding horizon that never "closes", so the
+   * closed-window trigger this method serves does not apply to it
+   * (STORY-05-02 scope note — rolling drift signals are alert-only,
+   * never auto-corrected, regardless of trigger).
+   */
+  async findFlatCountersDueForSweep(clientId, now, limit = 500) {
+    return this.collection
+      .find({ clientId, buckets: { $exists: false }, expireAt: { $lte: now } }, PRIMARY_READ_OPTS)
+      .limit(limit)
+      .toArray();
+  }
+
+  /**
+   * BRD §3.5 "corrects the counter [to] the value derived from `transactions`."
+   * An administrative overwrite, never on the hot path — `w:majority` for
+   * durability of the correction itself, unlike the `w:1` increments it repairs.
+   */
+  async correctCounterValue(clientId, key, { amount, count, now }) {
+    return this.updateOne(clientId, { _id: key }, { $set: { amount, count, updatedAt: now, reconciledAt: now } }, { upsert: false, ...MAJORITY_WRITE_OPTS });
   }
 }

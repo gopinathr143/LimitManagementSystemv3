@@ -116,6 +116,7 @@ const countersValidator = {
       createdAt: { bsonType: 'date' },
       updatedAt: { bsonType: 'date' },
       expireAt: { bsonType: 'date' },
+      reconciledAt: { bsonType: ['date', 'null'] },
     },
   },
 };
@@ -139,6 +140,26 @@ const transactionsValidator = {
       rejection: { bsonType: ['object', 'null'] },
       windowState: { bsonType: ['string', 'null'] },
       needsReconciliation: { bsonType: ['bool', 'null'] },
+      reversedAt: { bsonType: ['date', 'null'] },
+      reversalReason: { bsonType: ['string', 'null'] },
+    },
+  },
+};
+
+const reconciliationQueueValidator = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['clientId', 'counterKey', 'tier', 'reason', 'status', 'createdAt'],
+    properties: {
+      clientId: { bsonType: 'string' },
+      counterKey: { bsonType: 'string' },
+      tier: { bsonType: 'string' },
+      sourceTransactionId: { bsonType: ['string', 'null'] },
+      reason: { enum: ['COMPENSATION_FLOOR_GUARD_FAILED', 'REVERSAL_FLOOR_GUARD_FAILED'] },
+      status: { enum: ['PENDING', 'RESOLVED'] },
+      createdAt: { bsonType: 'date' },
+      resolvedAt: { bsonType: ['date', 'null'] },
+      resolution: { bsonType: ['object', 'null'] },
     },
   },
 };
@@ -187,6 +208,12 @@ export async function initDb(client, dbName = env.mongo.dbName) {
   await ensureCollection(db, 'transactions', transactionsValidator);
   await db.collection('transactions').createIndex({ status: 1, claimedAt: 1 }, { name: 'idx_transactions_status_claimedAt' });
   await db.collection('transactions').createIndex({ clientId: 1 }, { name: 'idx_transactions_clientId' });
+
+  await ensureCollection(db, 'reconciliationQueue', reconciliationQueueValidator);
+  await db
+    .collection('reconciliationQueue')
+    .createIndex({ status: 1, createdAt: 1 }, { name: 'idx_reconciliationQueue_status_createdAt' });
+  await db.collection('reconciliationQueue').createIndex({ clientId: 1 }, { name: 'idx_reconciliationQueue_clientId' });
 }
 
 async function main() {
@@ -194,7 +221,7 @@ async function main() {
   try {
     await client.connect();
     await initDb(client);
-    console.log('Database initialised (clients, configAudit, clientConfigs, limits, limitsAudit, counters, transactions).');
+    console.log('Database initialised (clients, configAudit, clientConfigs, limits, limitsAudit, counters, transactions, reconciliationQueue).');
   } finally {
     await client.close();
   }

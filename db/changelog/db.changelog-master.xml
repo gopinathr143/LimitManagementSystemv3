@@ -20,4 +20,7 @@
     <!-- EPIC-04 — Transaction Validation and Idempotency -->
     <include file="changes/007-transactions-collection.xml" relativeToChangelogFile="true"/>
 
+    <!-- EPIC-05 — Reversal and Reconciliation -->
+    <include file="changes/008-reconciliation-queue-collection.xml" relativeToChangelogFile="true"/>
+
 </databaseChangeLog>

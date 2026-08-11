@@ -11,6 +11,7 @@ import { LimitDefinitionRepository } from './repositories/limitDefinition.reposi
 import { LimitsAuditRepository } from './repositories/limitsAudit.repository.js';
 import { CounterRepository } from './repositories/counter.repository.js';
 import { TransactionRepository } from './repositories/transaction.repository.js';
+import { ReconciliationRepository } from './repositories/reconciliation.repository.js';
 
 import { ClientService } from './services/client.service.js';
 import { RegistryService } from './services/registry.service.js';
@@ -19,6 +20,7 @@ import { ConfigCache } from './services/configCache.service.js';
 import { CounterEngineService } from './services/counterEngine.service.js';
 import { TransactionService } from './services/transaction.service.js';
 import { StaleClaimReaperService } from './services/staleClaimReaper.service.js';
+import { ReconciliationService } from './services/reconciliation.service.js';
 
 import { ClientController } from './controllers/client.controller.js';
 import { RegistryController } from './controllers/registry.controller.js';
@@ -32,6 +34,7 @@ import { LIMITS_COLLECTION } from './models/limitDefinition.model.js';
 import { LIMITS_AUDIT_COLLECTION } from './models/limitsAudit.model.js';
 import { COUNTERS_COLLECTION } from './models/counter.model.js';
 import { TRANSACTIONS_COLLECTION } from './models/transaction.model.js';
+import { RECONCILIATION_QUEUE_COLLECTION } from './models/reconciliation.model.js';
 
 /**
  * Composition root. Takes a connected `db` handle and wires
@@ -46,6 +49,7 @@ export function createApp(db) {
   const limitsAuditRepository = new LimitsAuditRepository(db.collection(LIMITS_AUDIT_COLLECTION));
   const counterRepository = new CounterRepository(db.collection(COUNTERS_COLLECTION));
   const transactionRepository = new TransactionRepository(db.collection(TRANSACTIONS_COLLECTION));
+  const reconciliationRepository = new ReconciliationRepository(db.collection(RECONCILIATION_QUEUE_COLLECTION));
 
   const clientService = new ClientService(clientRepository, configAuditRepository);
   const configCache = new ConfigCache(registryRepository, limitDefinitionRepository);
@@ -58,7 +62,8 @@ export function createApp(db) {
     configCache,
   );
   const counterEngineService = new CounterEngineService(counterRepository, configCache);
-  const transactionService = new TransactionService(transactionRepository, configCache, counterEngineService);
+  const reconciliationService = new ReconciliationService(counterRepository, transactionRepository, reconciliationRepository, { clientRepository });
+  const transactionService = new TransactionService(transactionRepository, configCache, counterEngineService, { reconciliationService });
   const staleClaimReaperService = new StaleClaimReaperService(transactionRepository);
 
   const clientController = new ClientController(clientService);
@@ -77,9 +82,10 @@ export function createApp(db) {
   app.use(errorHandler);
 
   // Exposed for other epics' route wiring and for tests that need service/cache instances directly.
-  app.locals.services = { clientService, registryService, limitDefinitionService, counterEngineService, transactionService };
+  app.locals.services = { clientService, registryService, limitDefinitionService, counterEngineService, transactionService, reconciliationService };
   app.locals.configCache = configCache;
   app.locals.staleClaimReaperService = staleClaimReaperService;
+  app.locals.reconciliationService = reconciliationService;
   app.locals.warmConfigCache = async () => {
     const activeClientIds = await clientRepository.listActiveClientIds();
     await configCache.warm(activeClientIds);

@@ -20,4 +20,13 @@ export class TransactionController {
       next(error);
     }
   };
+
+  reverse = async (req, res, next) => {
+    try {
+      const result = await this.transactionService.reverseTransaction(req.tenant.clientId, req.params.transactionId, req.body?.reason);
+      res.status(result.httpStatus).json(result.body);
+    } catch (error) {
+      next(error);
+    }
+  };
 }

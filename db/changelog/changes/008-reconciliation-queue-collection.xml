@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:mongodb="http://www.liquibase.org/xml/ns/mongodb"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+        http://www.liquibase.org/xml/ns/mongodb
+        http://www.liquibase.org/xml/ns/mongodb/liquibase-mongodb-latest.xsd">
+
+    <!--
+        BRD §3.5 — the targeted-reconciliation queue. A compensation or
+        reversal floor-guard failure enqueues a signal here immediately
+        (STORY-05-02 AC2), instead of waiting for the periodic closed-window
+        sweep. `status + createdAt` is the sweeper's drain-queue index.
+    -->
+    <changeSet id="001-create-reconciliation-queue-collection" author="imps-velocity">
+        <mongodb:createCollection collectionName="reconciliationQueue">
+            <mongodb:options>
+                {
+                  "validator": {
+                    "$jsonSchema": {
+                      "bsonType": "object",
+                      "required": ["clientId", "counterKey", "tier", "reason", "status", "createdAt"],
+                      "properties": {
+                        "clientId": { "bsonType": "string" },
+                        "counterKey": { "bsonType": "string" },
+                        "tier": { "bsonType": "string" },
+                        "sourceTransactionId": { "bsonType": ["string", "null"] },
+                        "reason": { "enum": ["COMPENSATION_FLOOR_GUARD_FAILED", "REVERSAL_FLOOR_GUARD_FAILED"] },
+                        "status": { "enum": ["PENDING", "RESOLVED"] },
+                        "createdAt": { "bsonType": "date" },
+                        "resolvedAt": { "bsonType": ["date", "null"] },
+                        "resolution": { "bsonType": ["object", "null"] }
+                      }
+                    }
+                  },
+                  "validationLevel": "strict",
+                  "validationAction": "error"
+                }
+            </mongodb:options>
+        </mongodb:createCollection>
+    </changeSet>
+
+    <changeSet id="002-reconciliation-queue-status-idx" author="imps-velocity">
+        <mongodb:createIndex collectionName="reconciliationQueue">
+            <mongodb:keys>{ "status": 1, "createdAt": 1 }</mongodb:keys>
+            <mongodb:options>{ "name": "idx_reconciliationQueue_status_createdAt" }</mongodb:options>
+        </mongodb:createIndex>
+    </changeSet>
+
+    <changeSet id="003-reconciliation-queue-clientid-idx" author="imps-velocity">
+        <mongodb:createIndex collectionName="reconciliationQueue">
+            <mongodb:keys>{ "clientId": 1 }</mongodb:keys>
+            <mongodb:options>{ "name": "idx_reconciliationQueue_clientId" }</mongodb:options>
+        </mongodb:createIndex>
+    </changeSet>
+
+</databaseChangeLog>

@@ -35,7 +35,8 @@
                         "buckets": { "bsonType": ["object", "null"] },
                         "createdAt": { "bsonType": "date" },
                         "updatedAt": { "bsonType": "date" },
-                        "expireAt": { "bsonType": "date" }
+                        "expireAt": { "bsonType": "date" },
+                        "reconciledAt": { "bsonType": ["date", "null"] }
                       }
                     }
                   },
