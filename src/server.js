@@ -21,6 +21,12 @@ async function main() {
   // BRD §3.5 — the reconciliation sweeper: targeted queue draining plus the periodic closed-window pass.
   app.locals.reconciliationService.start();
 
+  // BRD §4.11 AC5 — periodic replication-lag check against the real replica set.
+  app.locals.replicationLagMonitor.start(app.locals.db.admin());
+
+  // BRD §4.7 — moves terminal transactions past the hot-retention window to the archive tier.
+  app.locals.archivalService.start();
+
   const server = app.listen(env.port, () => {
     logger.info({ port: env.port, nodeEnv: env.nodeEnv }, 'IMPS Outward Velocity Limit System listening');
   });
@@ -30,6 +36,8 @@ async function main() {
     app.locals.configCache.stopPolling();
     app.locals.staleClaimReaperService.stop();
     app.locals.reconciliationService.stop();
+    app.locals.replicationLagMonitor.stop();
+    app.locals.archivalService.stop();
     server.close(async () => {
       await closeDatabase();
       process.exit(0);

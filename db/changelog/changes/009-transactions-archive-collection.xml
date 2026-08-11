@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:mongodb="http://www.liquibase.org/xml/ns/mongodb"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+        http://www.liquibase.org/xml/ns/mongodb
+        http://www.liquibase.org/xml/ns/mongodb/liquibase-mongodb-latest.xsd">
+
+    <!--
+        BRD §4.7 — the cold tier. Same schema and the same compound `_id`
+        `{clientId, transactionId}` as `transactions`, so a record is
+        addressable by exactly the same key whether it is hot or archived.
+        Note: this collection lives in the same MongoDB cluster as the hot
+        tier. The BRD's own wording describes the real cold tier as
+        genuinely separate infrastructure ("a separate archival cluster or
+        object storage in a columnar format") — provisioning that is a
+        deployment-time decision, recorded as an open item in STORY-06-01.
+        This collection proves the copy-then-delete mechanism and the
+        compound-key retrievability contract any real cold store must meet.
+    -->
+    <changeSet id="001-create-transactions-archive-collection" author="imps-velocity">
+        <mongodb:createCollection collectionName="transactionsArchive">
+            <mongodb:options>
+                {
+                  "validator": {
+                    "$jsonSchema": {
+                      "bsonType": "object",
+                      "required": ["_id", "clientId", "transactionId", "status", "requestData", "claimedAt", "updatedAt"],
+                      "properties": {
+                        "_id": { "bsonType": "object" },
+                        "clientId": { "bsonType": "string" },
+                        "transactionId": { "bsonType": "string" },
+                        "status": { "enum": ["PENDING", "APPROVED", "REJECTED", "REVERSED", "ABANDONED", "SYSTEM_FAILURE"] },
+                        "requestData": { "bsonType": "object" },
+                        "claimedAt": { "bsonType": "date" },
+                        "updatedAt": { "bsonType": "date" },
+                        "resolvedAt": { "bsonType": ["date", "null"] },
+                        "abandonedAt": { "bsonType": ["date", "null"] },
+                        "instanceId": { "bsonType": ["string", "null"] },
+                        "appliedCounterKeys": { "bsonType": ["array", "null"] },
+                        "rejection": { "bsonType": ["object", "null"] },
+                        "windowState": { "bsonType": ["string", "null"] },
+                        "needsReconciliation": { "bsonType": ["bool", "null"] },
+                        "reversedAt": { "bsonType": ["date", "null"] },
+                        "reversalReason": { "bsonType": ["string", "null"] }
+                      }
+                    }
+                  },
+                  "validationLevel": "strict",
+                  "validationAction": "error"
+                }
+            </mongodb:options>
+        </mongodb:createCollection>
+    </changeSet>
+
+    <changeSet id="002-transactions-archive-clientid-idx" author="imps-velocity">
+        <mongodb:createIndex collectionName="transactionsArchive">
+            <mongodb:keys>{ "clientId": 1 }</mongodb:keys>
+            <mongodb:options>{ "name": "idx_transactionsArchive_clientId" }</mongodb:options>
+        </mongodb:createIndex>
+    </changeSet>
+
+</databaseChangeLog>

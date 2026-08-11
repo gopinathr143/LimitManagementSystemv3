@@ -24,10 +24,15 @@ export class TransactionService {
     // BRD §3.5 — optional so EPIC-04 (built before the sweeper existed) keeps working unwired; when present, every
     // floor-guard failure (saga rollback or reversal) is queued for targeted reconciliation, not just logged.
     this.reconciliationService = options.reconciliationService ?? null;
+    // BRD §4.11 — optional so every existing caller keeps working unwired.
+    this.metricsService = options.metricsService ?? null;
+    // BRD §4.7 — optional; when present, getStatus() falls back to the cold tier once a record has aged out of the hot collection.
+    this.transactionArchiveRepository = options.transactionArchiveRepository ?? null;
   }
 
   /** BRD §3.1 — the mutex. `timezone` is the client's (already resolved by `resolveClientId` middleware — no extra lookup here). Returns a uniform `{httpStatus, body}`. */
   async submit(clientId, payload, timezone, now = new Date()) {
+    const startedAt = process.hrtime.bigint();
     const { transactionId, amount, attributes } = validateTransactionRequest(payload);
 
     const claimDoc = buildClaimDocument({ clientId, transactionId, requestData: { amount, ...attributes }, now, instanceId: this.instanceId });
@@ -52,6 +57,8 @@ export class TransactionService {
         .resolve(clientId, transactionId, { status: TRANSACTION_STATUS.SYSTEM_FAILURE, updatedAt: now, resolvedAt: now })
         .catch((innerError) => logger.error({ err: innerError, clientId, transactionId }, 'Best-effort SYSTEM_FAILURE resolve also failed'));
       logger.error({ err: error, clientId, transactionId }, 'Resolve write failed after retries; compensated and marked SYSTEM_FAILURE');
+      this.metricsService?.recordError(clientId, 'SYSTEM_FAILURE');
+      this.#observeRequestLatency(startedAt);
       return { httpStatus: 500, body: { success: false, error: { code: 'SYSTEM_FAILURE', message: 'Unable to resolve transaction outcome.' } } };
     }
 
@@ -59,16 +66,38 @@ export class TransactionService {
       logger.warn({ clientId, transactionId }, 'Resolve matched no PENDING claim — already resolved by another path');
     }
 
+    this.metricsService?.recordDecision(clientId, outcome.status);
+    this.#observeRequestLatency(startedAt);
     return { httpStatus: 200, body: { success: true, data: this.#toResponseData(transactionId, outcome) } };
   }
 
-  /** BRD §3.2 AC3 — retrievable by the compound (clientId, transactionId) key, for status lookup and (later) reversal. */
+  #observeRequestLatency(startedAtNs) {
+    if (!this.metricsService) {
+      return;
+    }
+    const elapsedSeconds = Number(process.hrtime.bigint() - startedAtNs) / 1e9;
+    this.metricsService.observeRequestLatency(elapsedSeconds);
+  }
+
+  /**
+   * BRD §3.2 AC3 — retrievable by the compound (clientId, transactionId)
+   * key, for status lookup and reversal. BRD §4.7 AC2 — once a record has
+   * aged out of the hot collection, the SAME lookup must still resolve it
+   * from the archive, so a consumer never needs to know which tier a
+   * record currently lives in.
+   */
   async getStatus(clientId, transactionId) {
     const doc = await this.transactionRepository.findByTransactionId(clientId, transactionId);
-    if (!doc) {
-      throw AppError.notFound(`Transaction '${transactionId}' not found for client '${clientId}'.`, 'TRANSACTION_NOT_FOUND');
+    if (doc) {
+      return this.#toResponseData(transactionId, doc);
     }
-    return this.#toResponseData(transactionId, doc);
+    if (this.transactionArchiveRepository) {
+      const archived = await this.transactionArchiveRepository.findByTransactionId(clientId, transactionId);
+      if (archived) {
+        return this.#toResponseData(transactionId, archived);
+      }
+    }
+    throw AppError.notFound(`Transaction '${transactionId}' not found for client '${clientId}'.`, 'TRANSACTION_NOT_FOUND');
   }
 
   /**
@@ -137,6 +166,7 @@ export class TransactionService {
       const result = await this.#compensateOne(clientId, applied);
       if (!result.floorGuardHeld) {
         logger.error({ clientId, transactionId, appliedKey: applied.key, tier: applied.tier }, 'Reversal floor guard failed — drift signal for reconciliation');
+        this.metricsService?.recordFloorGuardFailure(clientId, applied.tier, 'REVERSAL');
         // eslint-disable-next-line no-await-in-loop
         await this.#queueDrift(clientId, transactionId, applied, 'REVERSAL_FLOOR_GUARD_FAILED');
       }
@@ -167,6 +197,7 @@ export class TransactionService {
 
   #responseForExisting(existing) {
     if (!existing || existing.status === TRANSACTION_STATUS.PENDING) {
+      this.metricsService?.recordInProgress(existing?.clientId ?? 'UNKNOWN');
       return { httpStatus: 409, body: { success: false, error: { code: 'TRANSACTION_IN_PROGRESS', message: 'Transaction is being processed; retry shortly.' } } };
     }
     if (TERMINAL_TRANSACTION_STATUSES.includes(existing.status)) {
@@ -229,19 +260,18 @@ export class TransactionService {
       const perTxnResult = this.counterEngineService.checkPerTransaction(clientId, { dimensionCode: dimension.code, attributeMap, txnAmount: amount, now });
       if (!perTxnResult.passed) {
         await this.#compensateAll(clientId, appliedKeys, transactionId);
-        return {
-          status: TRANSACTION_STATUS.REJECTED,
-          rejection: {
-            dimensionCode: dimension.code,
-            windowType: 'PER_TXN',
-            metrics: ['AMOUNT'],
-            thresholdAmount: perTxnResult.breach?.threshold ?? null,
-            definitionVersion: perTxnResult.definitionVersion ?? null,
-            currentAmount: amount,
-            currentCount: null,
-            reason: perTxnResult.reason,
-          },
+        const rejection = {
+          dimensionCode: dimension.code,
+          windowType: 'PER_TXN',
+          metrics: ['AMOUNT'],
+          thresholdAmount: perTxnResult.breach?.threshold ?? null,
+          definitionVersion: perTxnResult.definitionVersion ?? null,
+          currentAmount: amount,
+          currentCount: null,
+          reason: perTxnResult.reason,
         };
+        this.metricsService?.recordRejection(clientId, rejection);
+        return { status: TRANSACTION_STATUS.REJECTED, rejection };
       }
 
       const orderedValues = attributeMapToOrderedValues(dimension.attributes, attributeMap);
@@ -269,20 +299,18 @@ export class TransactionService {
         if (!result.passed) {
           // eslint-disable-next-line no-await-in-loop
           await this.#compensateAll(clientId, appliedKeys, transactionId);
-          return {
-            status: TRANSACTION_STATUS.REJECTED,
-            rejection: {
-              dimensionCode: dimension.code,
-              windowType,
-              metrics: result.breach.metrics ?? [],
-              thresholdAmount: result.breach.thresholdAmount,
-              thresholdCount: result.breach.thresholdCount,
-              definitionVersion: definition.definitionVersion,
-              currentAmount: result.breach.currentAmount,
-              currentCount: result.breach.currentCount,
-            },
-            windowState: warming ? WINDOW_STATE.WARMING : undefined,
+          const rejection = {
+            dimensionCode: dimension.code,
+            windowType,
+            metrics: result.breach.metrics ?? [],
+            thresholdAmount: result.breach.thresholdAmount,
+            thresholdCount: result.breach.thresholdCount,
+            definitionVersion: definition.definitionVersion,
+            currentAmount: result.breach.currentAmount,
+            currentCount: result.breach.currentCount,
           };
+          this.metricsService?.recordRejection(clientId, rejection);
+          return { status: TRANSACTION_STATUS.REJECTED, rejection, windowState: warming ? WINDOW_STATE.WARMING : undefined };
         }
 
         appliedKeys.push({
@@ -318,32 +346,25 @@ export class TransactionService {
 
   async #checkAndIncrement({ clientId, dimension, windowType, windowEntry, orderedValues, timezone, amount, definition, now }) {
     const common = { thresholdAmount: definition.thresholdAmount, thresholdCount: definition.thresholdCount, txnAmount: amount, now };
+    const tier = this.#tierFor(dimension, windowType);
+    const startedAt = this.metricsService ? process.hrtime.bigint() : null;
 
+    let result;
     if (windowType === WINDOW_TYPE.DAILY_ROLLING) {
       const granularity = windowEntry.granularity;
-      if (dimension.hot) {
-        return this.counterEngineService.checkAndIncrementRollingSharded(clientId, {
-          dimensionCode: dimension.code,
-          attributeValues: orderedValues,
-          windowEntry,
-          granularity,
-          ...common,
-        });
-      }
-      return this.counterEngineService.checkAndIncrementRolling(clientId, { dimensionCode: dimension.code, attributeValues: orderedValues, granularity, ...common });
+      result = dimension.hot
+        ? await this.counterEngineService.checkAndIncrementRollingSharded(clientId, { dimensionCode: dimension.code, attributeValues: orderedValues, windowEntry, granularity, ...common })
+        : await this.counterEngineService.checkAndIncrementRolling(clientId, { dimensionCode: dimension.code, attributeValues: orderedValues, granularity, ...common });
+    } else if (dimension.hot) {
+      result = await this.counterEngineService.checkAndIncrementTier2(clientId, { dimensionCode: dimension.code, windowType, attributeValues: orderedValues, timezone, windowEntry, ...common });
+    } else {
+      result = await this.counterEngineService.checkAndIncrementTier1(clientId, { dimensionCode: dimension.code, windowType, attributeValues: orderedValues, timezone, ...common });
     }
 
-    if (dimension.hot) {
-      return this.counterEngineService.checkAndIncrementTier2(clientId, {
-        dimensionCode: dimension.code,
-        windowType,
-        attributeValues: orderedValues,
-        timezone,
-        windowEntry,
-        ...common,
-      });
+    if (startedAt !== null) {
+      this.metricsService.observeTierLatency(tier, Number(process.hrtime.bigint() - startedAt) / 1e9);
     }
-    return this.counterEngineService.checkAndIncrementTier1(clientId, { dimensionCode: dimension.code, windowType, attributeValues: orderedValues, timezone, ...common });
+    return result;
   }
 
   /** BRD §3.3 step 3 — compensate in reverse order. A compensation that fails (floor guard) is logged as a drift signal and queued for reconciliation, never silently dropped (§3.4/§3.5). */
@@ -354,6 +375,7 @@ export class TransactionService {
       const result = await this.#compensateOne(clientId, applied);
       if (!result.floorGuardHeld) {
         logger.error({ clientId, appliedKey: applied.key, tier: applied.tier }, 'Compensation floor guard failed — drift signal for reconciliation');
+        this.metricsService?.recordFloorGuardFailure(clientId, applied.tier, 'COMPENSATION');
         // eslint-disable-next-line no-await-in-loop
         await this.#queueDrift(clientId, transactionId, applied, 'COMPENSATION_FLOOR_GUARD_FAILED');
       }

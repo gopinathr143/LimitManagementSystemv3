@@ -3,6 +3,17 @@ import { KNOWN_TRANSACTION_ATTRIBUTES, TRANSACTION_STATUS } from '../constants/i
 
 export const TRANSACTIONS_COLLECTION = 'transactions';
 
+/**
+ * BRD §4.7 — the cold tier. The BRD's own wording ("a separate archival
+ * cluster or object storage in a columnar format") describes genuinely
+ * different infrastructure from the hot MongoDB replica set; provisioning
+ * that is a deployment-time decision outside this codebase's reach. This
+ * collection demonstrates the correct MECHANISM (copy-then-delete,
+ * retrievable by the same compound key) that any real cold-store target
+ * would need — see STORY-06-01's notes for the recorded scope boundary.
+ */
+export const TRANSACTIONS_ARCHIVE_COLLECTION = 'transactionsArchive';
+
 const TRANSACTION_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 function isNonNegativeInteger(value) {

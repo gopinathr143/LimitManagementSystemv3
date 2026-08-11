@@ -1,6 +1,6 @@
 import { TenantScopedRepository } from './base.repository.js';
 import { PRIMARY_READ_OPTS, MAJORITY_WRITE_OPTS } from '../config/database.js';
-import { TRANSACTION_STATUS } from '../constants/index.js';
+import { TRANSACTION_STATUS, TERMINAL_TRANSACTION_STATUSES } from '../constants/index.js';
 
 const MONGO_DUPLICATE_KEY = 11000;
 
@@ -109,5 +109,23 @@ export class TransactionRepository extends TenantScopedRepository {
       updatedAt: now,
       needsReconciliation: true,
     });
+  }
+
+  /**
+   * BRD §4.7 — the archival sweep's source query: terminal-status records
+   * past the hot-retention cutoff. Cross-tenant scan, the same documented
+   * exception as `findStalePendingClaims` (the sweep processes every
+   * client in one pass, not one client's own repository call).
+   */
+  async findTerminalOlderThan(cutoffDate, limit = 500) {
+    return this.collection
+      .find({ status: { $in: TERMINAL_TRANSACTION_STATUSES }, updatedAt: { $lt: cutoffDate } }, PRIMARY_READ_OPTS)
+      .limit(limit)
+      .toArray();
+  }
+
+  /** The archival sweep's second step, only ever called after the copy into the archive collection has already succeeded (never the reverse order — see ArchivalService). */
+  async deleteArchived(clientId, transactionId) {
+    return this.deleteOne(clientId, { _id: { clientId, transactionId } }, MAJORITY_WRITE_OPTS);
   }
 }

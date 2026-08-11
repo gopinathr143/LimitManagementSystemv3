@@ -33,6 +33,8 @@ export class ReconciliationService {
     this.transactionRepository = transactionRepository;
     this.reconciliationRepository = reconciliationRepository;
     this.clientRepository = options.clientRepository ?? null;
+    // BRD §4.11 AC2 — optional so every existing caller keeps working unwired.
+    this.metricsService = options.metricsService ?? null;
     this.autoCorrectOpenWindows = options.autoCorrectOpenWindows === true;
     this.queuePollIntervalMs = options.queuePollIntervalMs ?? DEFAULT_QUEUE_POLL_INTERVAL_MS;
     this.closedWindowSweepIntervalMs = options.closedWindowSweepIntervalMs ?? DEFAULT_CLOSED_WINDOW_SWEEP_INTERVAL_MS;
@@ -116,11 +118,13 @@ export class ReconciliationService {
     const closed = isClosed ?? liveDoc.expireAt <= now;
     if (!closed && !this.autoCorrectOpenWindows) {
       // BRD §3.5 AC3 — open-window drift is alert-first; auto-correction only where policy permits.
+      this.metricsService?.recordDrift(clientId, 'ALERTED');
       return { action: 'ALERTED', drifted: true, actual, expected };
     }
 
     await this.counterRepository.correctCounterValue(clientId, counterKey, { amount: expected.amount, count: expected.count, now });
     logger.warn({ clientId, counterKey, correctedTo: expected }, 'Counter drift corrected');
+    this.metricsService?.recordDrift(clientId, 'CORRECTED');
     return { action: 'CORRECTED', drifted: true, actual, expected };
   }
 

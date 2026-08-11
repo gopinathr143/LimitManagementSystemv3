@@ -11,6 +11,7 @@ import { LimitDefinitionRepository } from './repositories/limitDefinition.reposi
 import { LimitsAuditRepository } from './repositories/limitsAudit.repository.js';
 import { CounterRepository } from './repositories/counter.repository.js';
 import { TransactionRepository } from './repositories/transaction.repository.js';
+import { TransactionArchiveRepository } from './repositories/transactionArchive.repository.js';
 import { ReconciliationRepository } from './repositories/reconciliation.repository.js';
 
 import { ClientService } from './services/client.service.js';
@@ -21,6 +22,9 @@ import { CounterEngineService } from './services/counterEngine.service.js';
 import { TransactionService } from './services/transaction.service.js';
 import { StaleClaimReaperService } from './services/staleClaimReaper.service.js';
 import { ReconciliationService } from './services/reconciliation.service.js';
+import { MetricsService } from './services/metrics.service.js';
+import { ReplicationLagMonitor } from './services/replicationLag.service.js';
+import { ArchivalService } from './services/archival.service.js';
 
 import { ClientController } from './controllers/client.controller.js';
 import { RegistryController } from './controllers/registry.controller.js';
@@ -33,7 +37,7 @@ import { CLIENT_CONFIGS_COLLECTION } from './models/registry.model.js';
 import { LIMITS_COLLECTION } from './models/limitDefinition.model.js';
 import { LIMITS_AUDIT_COLLECTION } from './models/limitsAudit.model.js';
 import { COUNTERS_COLLECTION } from './models/counter.model.js';
-import { TRANSACTIONS_COLLECTION } from './models/transaction.model.js';
+import { TRANSACTIONS_COLLECTION, TRANSACTIONS_ARCHIVE_COLLECTION } from './models/transaction.model.js';
 import { RECONCILIATION_QUEUE_COLLECTION } from './models/reconciliation.model.js';
 
 /**
@@ -49,6 +53,7 @@ export function createApp(db) {
   const limitsAuditRepository = new LimitsAuditRepository(db.collection(LIMITS_AUDIT_COLLECTION));
   const counterRepository = new CounterRepository(db.collection(COUNTERS_COLLECTION));
   const transactionRepository = new TransactionRepository(db.collection(TRANSACTIONS_COLLECTION));
+  const transactionArchiveRepository = new TransactionArchiveRepository(db.collection(TRANSACTIONS_ARCHIVE_COLLECTION));
   const reconciliationRepository = new ReconciliationRepository(db.collection(RECONCILIATION_QUEUE_COLLECTION));
 
   const clientService = new ClientService(clientRepository, configAuditRepository);
@@ -61,10 +66,17 @@ export function createApp(db) {
     registryService,
     configCache,
   );
-  const counterEngineService = new CounterEngineService(counterRepository, configCache);
-  const reconciliationService = new ReconciliationService(counterRepository, transactionRepository, reconciliationRepository, { clientRepository });
-  const transactionService = new TransactionService(transactionRepository, configCache, counterEngineService, { reconciliationService });
+  const metricsService = new MetricsService();
+  const counterEngineService = new CounterEngineService(counterRepository, configCache, { metricsService });
+  const reconciliationService = new ReconciliationService(counterRepository, transactionRepository, reconciliationRepository, { clientRepository, metricsService });
+  const transactionService = new TransactionService(transactionRepository, configCache, counterEngineService, {
+    reconciliationService,
+    metricsService,
+    transactionArchiveRepository,
+  });
   const staleClaimReaperService = new StaleClaimReaperService(transactionRepository);
+  const replicationLagMonitor = new ReplicationLagMonitor({ metricsService });
+  const archivalService = new ArchivalService(transactionRepository, transactionArchiveRepository);
 
   const clientController = new ClientController(clientService);
   const registryController = new RegistryController(registryService);
@@ -76,16 +88,20 @@ export function createApp(db) {
   const app = express();
   registerGlobalMiddleware(app);
 
-  app.use('/', createApiRouter({ resolveClientId, clientController, registryController, limitDefinitionController, transactionController }));
+  app.use('/', createApiRouter({ resolveClientId, clientController, registryController, limitDefinitionController, transactionController, metricsService }));
 
   app.use(notFoundHandler);
   app.use(errorHandler);
 
   // Exposed for other epics' route wiring and for tests that need service/cache instances directly.
-  app.locals.services = { clientService, registryService, limitDefinitionService, counterEngineService, transactionService, reconciliationService };
+  app.locals.services = { clientService, registryService, limitDefinitionService, counterEngineService, transactionService, reconciliationService, metricsService };
   app.locals.configCache = configCache;
   app.locals.staleClaimReaperService = staleClaimReaperService;
   app.locals.reconciliationService = reconciliationService;
+  app.locals.metricsService = metricsService;
+  app.locals.replicationLagMonitor = replicationLagMonitor;
+  app.locals.archivalService = archivalService;
+  app.locals.db = db;
   app.locals.warmConfigCache = async () => {
     const activeClientIds = await clientRepository.listActiveClientIds();
     await configCache.warm(activeClientIds);
