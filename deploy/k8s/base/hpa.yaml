@@ -1,0 +1,28 @@
+# CPU-based autoscaling as a floor, not a certified sizing model — this
+# service's real bottleneck under load is MongoDB (counter contention, write
+# latency), which CPU utilisation does not directly reflect. See
+# Docs/DEPLOYMENT.md "Required resources" before relying on this alone at
+# production scale; a request-latency or queue-depth-based metric (via a
+# Prometheus adapter reading imps_transaction_request_duration_seconds) would
+# be a better signal once real production traffic shapes are known.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: imps-velocity-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: imps-velocity-system
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300

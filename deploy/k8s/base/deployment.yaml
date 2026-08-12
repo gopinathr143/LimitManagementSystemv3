@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: imps-velocity-system
+  labels:
+    app.kubernetes.io/name: imps-velocity-system
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: imps-velocity-system
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: imps-velocity-system
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "3000"
+    spec:
+      # Every request is rejected fail-closed, never fail-open (BRD §4.9) — there is
+      # no bypass path, so it is safe to terminate a pod mid-traffic; in-flight
+      # requests either complete or the client retries against another pod.
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: app
+          # Placeholder — the deploy stage sets the real registry/tag with
+          # `kustomize edit set image imps-velocity-system=<registry>/imps-velocity-system:<tag>`
+          # immediately before `kustomize build | kubectl apply -f -`. See .gocd.yaml.
+          image: imps-velocity-system:build-me
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: imps-velocity-config
+            - secretRef:
+                name: imps-velocity-mongo-credentials
+          # /health only proves the process is up and accepting connections — it does
+          # NOT re-check MongoDB reachability after startup (see src/routes/index.js).
+          # A lost DB connection surfaces as 5xx on real traffic, not as a failed probe.
+          # Used here anyway because no deeper "dependency health" endpoint exists yet;
+          # tracked as a known gap in Docs/DEPLOYMENT.md.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 5
+          # Baseline only — this Express service does no CPU-heavy work per request
+          # (the counter engine is I/O-bound against MongoDB), but these numbers come
+          # from a single laptop's measurements (STORY-07-01/07-02), not a sized
+          # production load test. Tune from real staging load-test numbers before
+          # trusting this at the BRD's 1,000 RPS target — see Docs/DEPLOYMENT.md
+          # "Required resources".
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      securityContext:
+        fsGroup: 101

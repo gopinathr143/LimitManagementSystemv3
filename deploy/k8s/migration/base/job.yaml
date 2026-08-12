@@ -1,0 +1,43 @@
+# Runs the schema/index bootstrap before a deploy rolls out. Uses the same
+# application image (scripts/init-db.js is bundled into it) rather than the
+# `liquibase` CLI, because db/changelog/*.xml is this project's source of
+# truth but no environment in this project's history has had the Liquibase
+# CLI installed to actually run it — scripts/init-db.js is the hand-mirrored
+# stand-in the whole test suite already depends on (see that script's own
+# header comment). If Liquibase is provisioned in your target environment,
+# prefer `yarn migrate` (db/liquibase.properties) instead and swap the
+# command below — either way, run this BEFORE the Deployment rollout, not
+# after, so a new pod never starts against a schema it doesn't expect.
+#
+# Idempotent: `ensureCollection` in scripts/init-db.js uses createCollection
+# on first run and collMod thereafter, so re-running this Job on every
+# deploy (including when nothing changed) is safe.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: imps-velocity-migration
+  # Namespace is set per environment by the overlay (deploy/k8s/migration/overlays/*).
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          # Placeholder — set at deploy time via `kustomize edit set image` (see
+          # deploy/k8s/migration/kustomization.yaml and .gocd.yaml).
+          image: imps-velocity-system:build-me
+          command: ["node", "scripts/init-db.js"]
+          envFrom:
+            - configMapRef:
+                name: imps-velocity-config
+            - secretRef:
+                name: imps-velocity-mongo-credentials
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
