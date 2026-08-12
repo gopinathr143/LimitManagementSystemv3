@@ -25,10 +25,18 @@ export async function connectToDatabase() {
     return db;
   }
 
-  client = new MongoClient(env.mongo.uri, {
+  const options = {
     retryWrites: true,
     readPreference: ReadPreference.PRIMARY,
-  });
+  };
+  // Credentials are passed as a separate driver option, never concatenated
+  // into the connection string — env.mongo.uri (built in env.js) never
+  // contains the password even when MONGO_USERNAME/MONGO_PASSWORD are set.
+  if (env.mongo.username) {
+    options.auth = { username: env.mongo.username, password: env.mongo.password };
+  }
+
+  client = new MongoClient(env.mongo.uri, options);
 
   await client.connect();
   db = client.db(env.mongo.dbName);

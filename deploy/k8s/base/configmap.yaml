@@ -1,5 +1,7 @@
-# Non-secret runtime config only. MONGO_URI (contains credentials) lives in
-# secret.yaml instead — see that file's comment for how it's actually supplied.
+# Non-secret runtime config only. The MongoDB password lives in secret.yaml
+# instead — see that file's comment for how it's actually supplied. Hosts,
+# username and replica-set name are NOT secret and belong here; only the
+# password is.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,3 +12,13 @@ data:
   LOG_LEVEL: "info"
   MONGO_DB_NAME: "imps_velocity"
   ACTOR_HEADER: "x-actor-id"
+  # AWS multi-node replica set — comma-separated host:port list, no scheme,
+  # no credentials. src/config/env.js assembles the connection string from
+  # these plus MONGO_PASSWORD (Secret) at startup; nothing here or in the
+  # resulting URI ever contains the password. Replace with your real member
+  # hosts per environment (this base value is a placeholder — the staging
+  # and production overlays should each patch this to their own cluster).
+  MONGO_HOSTS: "REPLACE_ME_HOST1:27017,REPLACE_ME_HOST2:27017,REPLACE_ME_HOST3:27017"
+  MONGO_REPLICA_SET: "rs0"
+  MONGO_AUTH_SOURCE: "admin"
+  MONGO_USERNAME: "imps_velocity_app"

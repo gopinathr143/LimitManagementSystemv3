@@ -7,6 +7,7 @@ patches:
   - path: replicas-patch.yaml
   - path: log-level-patch.yaml
   - path: hpa-patch.yaml
+  - path: mongo-hosts-patch.yaml
 # Image tag is set at deploy time by the GoCD stage:
 #   kustomize edit set image imps-velocity-system=<registry>/imps-velocity-system:<tag>
 # (run from this directory, immediately before `kustomize build | kubectl apply -f -`).

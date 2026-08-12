@@ -35,9 +35,25 @@ Source of truth: `src/config/env.js` / `.env.example`.
 | `PORT` | No | `3000` | |
 | `NODE_ENV` | No | `development` | Set `production` in every deployed environment. |
 | `LOG_LEVEL` | No | `info` | Pino level. `debug` is noisy — use only in staging/local. |
-| `MONGO_URI` | **Yes** | `mongodb://localhost:27017/imps_velocity?replicaSet=rs0` | Must reference a replica set (`replicaSet=` query param). Carries credentials — this is the one Secret value; never put it in a ConfigMap. |
 | `MONGO_DB_NAME` | **Yes** | `imps_velocity` | |
 | `ACTOR_HEADER` | No | `x-actor-id` | Optional, unverified caller-supplied header name recorded on audit entries — not a credential. |
+
+### MongoDB connection — two supported shapes
+
+`src/config/env.js` resolves the connection in this order:
+
+1. **`MONGO_URI` set** — used verbatim as the full connection string. Simplest for local dev/CI (`docker-compose.yml`'s single-node `rs0` has no auth configured, so this is what the test suites and `yarn dev` use — no change here).
+2. **`MONGO_URI` unset** — assembled from the discrete variables below. This is the shape a real AWS multi-node replica set wants: hosts, username, replica-set name and auth source are **not secret** and belong in a ConfigMap; only the password is a Secret value, and it is passed to the MongoDB driver as a separate `auth` option (`src/config/database.js`) — **never concatenated into the connection string**, so there's no percent-encoding footgun for special characters in a password and the assembled URI is safe to log if ever needed.
+
+| Variable | Required (shape 2) | Default | Notes |
+| :--- | :--- | :--- | :--- |
+| `MONGO_HOSTS` | Yes | `localhost:27017` | Comma-separated `host:port` list of the replica set's members — no scheme, no credentials. e.g. `mongo-a.internal:27017,mongo-b.internal:27017,mongo-c.internal:27017`. |
+| `MONGO_REPLICA_SET` | No | `rs0` | |
+| `MONGO_AUTH_SOURCE` | No | `admin` | Only added to the assembled URI when `MONGO_USERNAME` is set. |
+| `MONGO_USERNAME` | No (but see below) | _(unset)_ | Setting this is what switches `connectToDatabase()` into passing an `auth` option to the driver at all. |
+| `MONGO_PASSWORD` | Yes, if `MONGO_USERNAME` is set | _(unset)_ | **Secret value — Kubernetes Secret only, never a ConfigMap, never committed.** |
+
+Verified in this session: connecting with `MONGO_HOSTS`/`MONGO_USERNAME`/`MONGO_PASSWORD` against a real MongoDB user succeeds (a real authenticated write), the assembled `env.mongo.uri` contains no password at any point, and a wrong password fails closed with `MongoServerError: Authentication failed` rather than silently falling back to anything.
 
 ## 4. Container image
 
@@ -69,12 +85,12 @@ deploy/k8s/
 
 ### Secrets
 
-`deploy/k8s/base/secret.example.yaml` documents the one Secret the app needs (`imps-velocity-mongo-credentials`, key `MONGO_URI`) — it is **not** referenced by any `kustomization.yaml` and must never be filled in and committed. Recommended, in order of preference:
+`deploy/k8s/base/secret.example.yaml` documents the one Secret value the app needs (`imps-velocity-mongo-credentials`, key `MONGO_PASSWORD` only — hosts/username/replica-set/auth-source all live in `configmap.yaml` instead, see §3) — it is **not** referenced by any `kustomization.yaml` and must never be filled in and committed. Recommended, in order of preference:
 
 1. A secrets manager + operator (External Secrets Operator, Vault Agent Injector, Sealed Secrets, or your cloud provider's native CSI secret driver) syncing into `imps-velocity-mongo-credentials` in each namespace ahead of deploy.
-2. A separate, access-controlled step (human or a dedicated pipeline with tighter permissions than the app-deploy pipeline) running `kubectl create secret generic imps-velocity-mongo-credentials --from-literal=MONGO_URI=... -n <namespace>` once per environment, rotated out-of-band.
+2. A separate, access-controlled step (human or a dedicated pipeline with tighter permissions than the app-deploy pipeline) running `kubectl create secret generic imps-velocity-mongo-credentials --from-literal=MONGO_PASSWORD=... -n <namespace>` once per environment, rotated out-of-band.
 
-Either way, **the `imps-velocity-system` GoCD pipeline never sees or handles the Mongo credential** — it only waits for the Secret to already exist (the migration Job and app Deployment both `envFrom.secretRef` it and fail closed if it's missing, as verified above).
+Either way, **the `imps-velocity-system` GoCD pipeline never sees or handles the Mongo password** — it only waits for the Secret to already exist (the migration Job and app Deployment both `envFrom.secretRef` it and fail closed if it's missing, as verified above). The non-secret pieces (`MONGO_HOSTS`, `MONGO_USERNAME`, etc.) are ordinary ConfigMap values, per-environment via `deploy/k8s/overlays/{staging,production}/mongo-hosts-patch.yaml` — replace their `REPLACE_ME_*` placeholders with your real AWS replica-set member hosts.
 
 ### Resource requests/limits, replica counts, HPA
 
@@ -82,20 +98,21 @@ See §9 — these values need real staging load-test numbers before they're anyt
 
 ## 6. Manual deployment (no GoCD — first bring-up, or a human doing it directly)
 
-1. **Provision MongoDB** — a real replica set reachable from the cluster (see §9 for sizing). Confirm the shard key recommendation from `Docs/stories/STORY-06-01-...md` (`{clientId: 1, claimedAt: 1}`) is applied if/when the `transactions` collection is sharded.
+1. **Provision MongoDB** — a real replica set reachable from the cluster (see §9 for sizing). Confirm the shard key recommendation from `Docs/stories/STORY-06-01-...md` (`{clientId: 1, claimedAt: 1}`) is applied if/when the `transactions` collection is sharded. Create an application database user scoped to `imps_velocity` (not an admin-level account).
 2. **Build and push the image:**
    ```bash
    docker build -t <registry>/imps-velocity-system:<tag> .
    docker push <registry>/imps-velocity-system:<tag>
    ```
-3. **Create the namespace and Secret** for the target environment (`imps-velocity-staging` or `imps-velocity`):
+3. **Set the real replica-set hosts** for the target environment — edit `deploy/k8s/overlays/staging/mongo-hosts-patch.yaml` (or `overlays/production/...`) and replace its `REPLACE_ME_*` placeholders with your actual AWS member hosts; do the same for `MONGO_USERNAME` in `deploy/k8s/base/configmap.yaml` if it differs from the `imps_velocity_app` placeholder. Both are ordinary, non-secret config — commit the real hosts/username.
+4. **Create the namespace and Secret** for the target environment (`imps-velocity-staging` or `imps-velocity`) — **password only**, nothing else:
    ```bash
    kubectl create namespace imps-velocity-staging   # or apply the overlay first — it creates it too
    kubectl create secret generic imps-velocity-mongo-credentials \
-     --from-literal=MONGO_URI='mongodb://user:pass@host1,host2,host3/imps_velocity?replicaSet=rs0&authSource=admin&retryWrites=true&w=majority' \
+     --from-literal=MONGO_PASSWORD='<the application user'"'"'s password>' \
      -n imps-velocity-staging
    ```
-4. **Run the migration Job** (schema/index bootstrap — idempotent, safe to re-run):
+5. **Run the migration Job** (schema/index bootstrap — idempotent, safe to re-run):
    ```bash
    cd deploy/k8s/migration/base
    kustomize edit set image imps-velocity-system=<registry>/imps-velocity-system:<tag>   # or: kubectl kustomize... | sed, if you don't have the `kustomize` binary — kubectl's built-in kustomize doesn't expose `edit`, so this one step needs the standalone kustomize CLI, or hand-edit the image line
@@ -104,7 +121,7 @@ See §9 — these values need real staging load-test numbers before they're anyt
    kubectl apply -k .
    kubectl wait --for=condition=complete job/imps-velocity-migration -n imps-velocity-staging --timeout=120s
    ```
-5. **Deploy the app:**
+6. **Deploy the app:**
    ```bash
    cd deploy/k8s/base
    kustomize edit set image imps-velocity-system=<registry>/imps-velocity-system:<tag>
@@ -112,13 +129,13 @@ See §9 — these values need real staging load-test numbers before they're anyt
    kubectl apply -k .
    kubectl rollout status deployment/imps-velocity-system -n imps-velocity-staging --timeout=180s
    ```
-6. **Verify:**
+7. **Verify:**
    ```bash
    kubectl -n imps-velocity-staging port-forward svc/imps-velocity-system 3000:80
    curl -s localhost:3000/health
    curl -s localhost:3000/metrics | head -20
    ```
-7. **Smoke-test one real transaction** end to end (no auth — `clientId` is a path segment):
+8. **Smoke-test one real transaction** end to end (no auth — `clientId` is a path segment):
    ```bash
    curl -s -X POST localhost:3000/clients -d '{"clientId":"SMOKE1","name":"Smoke Test","timezone":"Asia/Kolkata"}' -H 'content-type: application/json'
    curl -s -X PUT localhost:3000/clients/SMOKE1/dimensions -d '{"direction":"OUTWARD","allowedDimensions":[{"code":"GLOBAL","attributes":[],"windows":["DAILY_CALENDAR"]}]}' -H 'content-type: application/json'
