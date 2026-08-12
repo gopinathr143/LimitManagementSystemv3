@@ -27,10 +27,11 @@
                   "validator": {
                     "$jsonSchema": {
                       "bsonType": "object",
-                      "required": ["_id", "clientId", "transactionId", "status", "requestData", "claimedAt", "updatedAt"],
+                      "required": ["_id", "clientId", "direction", "transactionId", "status", "requestData", "claimedAt", "updatedAt"],
                       "properties": {
                         "_id": { "bsonType": "object" },
                         "clientId": { "bsonType": "string" },
+                        "direction": { "enum": ["OUTWARD", "INWARD"] },
                         "transactionId": { "bsonType": "string" },
                         "status": { "enum": ["PENDING", "APPROVED", "REJECTED", "REVERSED", "ABANDONED", "SYSTEM_FAILURE"] },
                         "requestData": { "bsonType": "object" },

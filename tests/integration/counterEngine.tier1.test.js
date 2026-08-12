@@ -26,6 +26,7 @@ describe('CounterEngineService Tier 1 — STORY-03-03 (integration, real MongoDB
 
   test('AC1: within threshold — approved, atomically incremented', async () => {
     const result = await engine.checkAndIncrementTier1('CLIENT_T1', {
+      direction: 'OUTWARD',
       dimensionCode: 'UCIC',
       windowType: 'DAILY_CALENDAR',
       attributeValues: ['U1'],
@@ -38,7 +39,7 @@ describe('CounterEngineService Tier 1 — STORY-03-03 (integration, real MongoDB
   });
 
   test('AC2/UAT 33: an amount landing exactly on the threshold is approved; one paisa over is rejected', async () => {
-    const opts = { dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', attributeValues: ['U2'], timezone: 'UTC', thresholdAmount: 1000 };
+    const opts = { direction: 'OUTWARD', dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', attributeValues: ['U2'], timezone: 'UTC', thresholdAmount: 1000 };
     const exact = await engine.checkAndIncrementTier1('CLIENT_T1', { ...opts, txnAmount: 1000 });
     assert.equal(exact.passed, true);
 
@@ -47,7 +48,7 @@ describe('CounterEngineService Tier 1 — STORY-03-03 (integration, real MongoDB
   });
 
   test('AC2 (breach): the guarded update returns matchedCount 0, not a duplicate-key error, on the first attempt', async () => {
-    const opts = { dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', attributeValues: ['U4'], timezone: 'UTC', thresholdAmount: 1000 };
+    const opts = { direction: 'OUTWARD', dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', attributeValues: ['U4'], timezone: 'UTC', thresholdAmount: 1000 };
     await engine.checkAndIncrementTier1('CLIENT_T1', { ...opts, txnAmount: 900 });
     const breach = await engine.checkAndIncrementTier1('CLIENT_T1', { ...opts, txnAmount: 200 });
     assert.equal(breach.passed, false);
@@ -57,6 +58,7 @@ describe('CounterEngineService Tier 1 — STORY-03-03 (integration, real MongoDB
 
   test('AC5: independent amount vs count breach — the audit names the metric that actually breached', async () => {
     const opts = {
+      direction: 'OUTWARD',
       dimensionCode: 'UCIC',
       windowType: 'DAILY_CALENDAR',
       attributeValues: ['U5'],
@@ -73,7 +75,7 @@ describe('CounterEngineService Tier 1 — STORY-03-03 (integration, real MongoDB
   });
 
   test('AC4/UAT 30: concurrent bootstrap race on a brand-new key resolves cleanly for every caller', async () => {
-    const opts = { dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', attributeValues: ['U6'], timezone: 'UTC', thresholdAmount: 1000000 };
+    const opts = { direction: 'OUTWARD', dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', attributeValues: ['U6'], timezone: 'UTC', thresholdAmount: 1000000 };
     const results = await Promise.all(Array.from({ length: 20 }, () => engine.checkAndIncrementTier1('CLIENT_T1', { ...opts, txnAmount: 10 })));
     assert.ok(results.every((r) => r.passed === true), 'no concurrent bootstrap race should surface as an error or a spurious breach');
   });
@@ -85,6 +87,7 @@ describe('CounterEngineService Tier 1 — STORY-03-03 (integration, real MongoDB
     const CONCURRENT_REQUESTS = 30;
 
     const opts = {
+      direction: 'OUTWARD',
       dimensionCode: 'UCIC',
       windowType: 'DAILY_CALENDAR',
       attributeValues: ['U_HOT_ENTITY'],
@@ -107,7 +110,7 @@ describe('CounterEngineService Tier 1 — STORY-03-03 (integration, real MongoDB
   });
 
   test('compensateTier1: reversing an applied increment decrements exactly, and the floor guard holds', async () => {
-    const opts = { dimensionCode: 'ACCOUNT', windowType: 'DAILY_CALENDAR', attributeValues: ['A1'], timezone: 'UTC', txnAmount: 300, thresholdAmount: 1000 };
+    const opts = { direction: 'OUTWARD', dimensionCode: 'ACCOUNT', windowType: 'DAILY_CALENDAR', attributeValues: ['A1'], timezone: 'UTC', txnAmount: 300, thresholdAmount: 1000 };
     const applied = await engine.checkAndIncrementTier1('CLIENT_T1', opts);
     assert.equal(applied.passed, true);
 
@@ -120,7 +123,7 @@ describe('CounterEngineService Tier 1 — STORY-03-03 (integration, real MongoDB
   });
 
   test('compensateTier1 floor guard refuses to go negative', async () => {
-    const opts = { dimensionCode: 'ACCOUNT', windowType: 'DAILY_CALENDAR', attributeValues: ['A2'], timezone: 'UTC', txnAmount: 100, thresholdAmount: 1000 };
+    const opts = { direction: 'OUTWARD', dimensionCode: 'ACCOUNT', windowType: 'DAILY_CALENDAR', attributeValues: ['A2'], timezone: 'UTC', txnAmount: 100, thresholdAmount: 1000 };
     const applied = await engine.checkAndIncrementTier1('CLIENT_T1', opts);
     const overCompensate = await engine.compensateTier1('CLIENT_T1', applied.appliedKey, { amountDelta: 999999, countDelta: 1 });
     assert.equal(overCompensate.floorGuardHeld, false, 'decrementing past zero must be refused, not silently applied');

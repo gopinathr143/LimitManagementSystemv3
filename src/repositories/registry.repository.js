@@ -1,3 +1,5 @@
+import { normalizeRegistryDoc } from '../models/registry.model.js';
+
 /**
  * Deliberately does NOT extend TenantScopedRepository — same reasoning as
  * ClientRepository (STORY-01-01): exactly one `clientConfigs` document
@@ -9,8 +11,9 @@ export class RegistryRepository {
     this.collection = collection;
   }
 
+  /** STORY-08-03 AC3 — normalized here, the single choke point, so every downstream caller only ever sees the per-direction `directions` map shape, never a legacy top-level `allowedDimensions` document. */
   async findByClientId(clientId) {
-    return this.collection.findOne({ _id: clientId });
+    return normalizeRegistryDoc(await this.collection.findOne({ _id: clientId }));
   }
 
   async replace(doc) {

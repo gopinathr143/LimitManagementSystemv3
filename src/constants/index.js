@@ -3,6 +3,22 @@ export const CLIENT_STATUS = Object.freeze({
   SUSPENDED: 'SUSPENDED',
 });
 
+/**
+ * BRD §2.1.5/§2.1.6 — direction is a second, mandatory scoping axis alongside
+ * clientId. Unlike clientId it cannot be derived from anything trusted server
+ * side (the same client submits both directions over the same credential),
+ * so it must come from the request payload and is never defaulted.
+ */
+export const DIRECTION = Object.freeze({
+  OUTWARD: 'OUTWARD',
+  INWARD: 'INWARD',
+});
+
+export const ALL_DIRECTIONS = Object.freeze(Object.values(DIRECTION));
+
+/** BRD §2.1.7 — a COMBINED dimension's counter key carries this neutral segment instead of a specific direction, since the counter is shared across both. Not yet built (STORY-08-04, deliberately deferred — see EPIC-08 docs). Reserved here so the segment value is defined in one place when that story is picked up. */
+export const COMBINED_DIRECTION_SEGMENT = 'ALL';
+
 export const AUDIT_RESOURCE = Object.freeze({
   CLIENT: 'CLIENT',
   REGISTRY: 'REGISTRY',

@@ -13,39 +13,45 @@ const NOW = new Date('2026-08-11T10:00:00Z');
 
 describe('validateLimitDefinitionCreate — STORY-02-04, BRD §2.3.2 (integers, no floats)', () => {
   test('accepts a minimal valid PER_TXN definition (amount-only)', () => {
-    const normalized = validateLimitDefinitionCreate({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 500000 });
+    const normalized = validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 500000 });
     assert.equal(normalized.currency, 'INR');
     assert.equal(normalized.thresholdCount, null);
+    assert.equal(normalized.direction, 'OUTWARD');
+  });
+
+  test('STORY-08-05 AC3: rejects a missing or unrecognised direction', () => {
+    assert.throws(() => validateLimitDefinitionCreate({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 500000 }), AppError);
+    assert.throws(() => validateLimitDefinitionCreate({ direction: 'SIDEWAYS', dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 500000 }), AppError);
   });
 
   test('rejects PER_TXN with a thresholdCount (amount-only per §2.3 item 1)', () => {
     assert.throws(
-      () => validateLimitDefinitionCreate({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 1000, thresholdCount: 5 }),
+      () => validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 1000, thresholdCount: 5 }),
       AppError,
     );
   });
 
   test('rejects a definition with neither thresholdAmount nor thresholdCount', () => {
-    assert.throws(() => validateLimitDefinitionCreate({ dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR' }), AppError);
+    assert.throws(() => validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR' }), AppError);
   });
 
   test('rejects a non-integer (float) threshold', () => {
     assert.throws(
-      () => validateLimitDefinitionCreate({ dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 100.5 }),
+      () => validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 100.5 }),
       AppError,
     );
   });
 
   test('rejects a currency other than INR', () => {
     assert.throws(
-      () => validateLimitDefinitionCreate({ dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 100, currency: 'USD' }),
+      () => validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 100, currency: 'USD' }),
       AppError,
     );
   });
 
   test('rejects an unknown windowType', () => {
     assert.throws(
-      () => validateLimitDefinitionCreate({ dimensionCode: 'UCIC', windowType: 'YEARLY', thresholdAmount: 100 }),
+      () => validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode: 'UCIC', windowType: 'YEARLY', thresholdAmount: 100 }),
       AppError,
     );
   });
@@ -53,6 +59,7 @@ describe('validateLimitDefinitionCreate — STORY-02-04, BRD §2.3.2 (integers, 
   test('AC5: accepts a future effectiveFrom; rejects effectiveTo before effectiveFrom', () => {
     assert.doesNotThrow(() =>
       validateLimitDefinitionCreate({
+        direction: 'OUTWARD',
         dimensionCode: 'UCIC',
         windowType: 'DAILY_CALENDAR',
         thresholdAmount: 100,
@@ -61,6 +68,7 @@ describe('validateLimitDefinitionCreate — STORY-02-04, BRD §2.3.2 (integers, 
     );
     assert.throws(() =>
       validateLimitDefinitionCreate({
+        direction: 'OUTWARD',
         dimensionCode: 'UCIC',
         windowType: 'DAILY_CALENDAR',
         thresholdAmount: 100,
@@ -72,6 +80,7 @@ describe('validateLimitDefinitionCreate — STORY-02-04, BRD §2.3.2 (integers, 
 
   test('accepts a scope override map', () => {
     const normalized = validateLimitDefinitionCreate({
+      direction: 'OUTWARD',
       dimensionCode: 'UCIC',
       windowType: 'DAILY_CALENDAR',
       thresholdAmount: 100,
@@ -157,34 +166,38 @@ describe('evaluateEffectiveness — STORY-02-05', () => {
   });
 });
 
-describe('findApplicableDefinition — STORY-02-04 AC2 (scope precedence)', () => {
-  const wildcard = { dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', scope: null, isActive: true, effectiveFrom: NOW, effectiveTo: null, thresholdAmount: 100 };
-  const scoped = { dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', scope: { ucic: 'U12345' }, isActive: true, effectiveFrom: NOW, effectiveTo: null, thresholdAmount: 999 };
+describe('findApplicableDefinition — STORY-02-04 AC2 (scope precedence) / STORY-08-05 (direction filter)', () => {
+  const wildcard = { direction: 'OUTWARD', dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', scope: null, isActive: true, effectiveFrom: NOW, effectiveTo: null, thresholdAmount: 100 };
+  const scoped = { direction: 'OUTWARD', dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', scope: { ucic: 'U12345' }, isActive: true, effectiveFrom: NOW, effectiveTo: null, thresholdAmount: 999 };
 
   test('a scope override takes precedence over the wildcard default for matching attribute values', () => {
-    const result = findApplicableDefinition([wildcard, scoped], 'UCIC', 'DAILY_CALENDAR', { ucic: 'U12345' }, NOW);
+    const result = findApplicableDefinition([wildcard, scoped], 'OUTWARD', 'UCIC', 'DAILY_CALENDAR', { ucic: 'U12345' }, NOW);
     assert.equal(result.thresholdAmount, 999);
   });
 
   test('falls back to the wildcard default when no scope matches', () => {
-    const result = findApplicableDefinition([wildcard, scoped], 'UCIC', 'DAILY_CALENDAR', { ucic: 'U_OTHER' }, NOW);
+    const result = findApplicableDefinition([wildcard, scoped], 'OUTWARD', 'UCIC', 'DAILY_CALENDAR', { ucic: 'U_OTHER' }, NOW);
     assert.equal(result.thresholdAmount, 100);
   });
 
   test('returns null (Unlimited) when nothing matches', () => {
-    const result = findApplicableDefinition([scoped], 'UCIC', 'DAILY_CALENDAR', { ucic: 'U_OTHER' }, NOW);
+    const result = findApplicableDefinition([scoped], 'OUTWARD', 'UCIC', 'DAILY_CALENDAR', { ucic: 'U_OTHER' }, NOW);
     assert.equal(result, null);
   });
 
   test('excludes an inactive or not-yet-effective definition', () => {
     const inactive = { ...wildcard, isActive: false };
     const notYetEffective = { ...wildcard, effectiveFrom: new Date(NOW.getTime() + 100000) };
-    assert.equal(findApplicableDefinition([inactive], 'UCIC', 'DAILY_CALENDAR', {}, NOW), null);
-    assert.equal(findApplicableDefinition([notYetEffective], 'UCIC', 'DAILY_CALENDAR', {}, NOW), null);
+    assert.equal(findApplicableDefinition([inactive], 'OUTWARD', 'UCIC', 'DAILY_CALENDAR', {}, NOW), null);
+    assert.equal(findApplicableDefinition([notYetEffective], 'OUTWARD', 'UCIC', 'DAILY_CALENDAR', {}, NOW), null);
   });
 
   test('excludes a definition past its effectiveTo', () => {
     const expired = { ...wildcard, effectiveTo: new Date(NOW.getTime() - 1000) };
-    assert.equal(findApplicableDefinition([expired], 'UCIC', 'DAILY_CALENDAR', {}, NOW), null);
+    assert.equal(findApplicableDefinition([expired], 'OUTWARD', 'UCIC', 'DAILY_CALENDAR', {}, NOW), null);
+  });
+
+  test('STORY-08-05: excludes a definition belonging to a different direction, even if otherwise identical', () => {
+    assert.equal(findApplicableDefinition([wildcard], 'INWARD', 'UCIC', 'DAILY_CALENDAR', {}, NOW), null);
   });
 });

@@ -56,7 +56,7 @@ export function createApp(db) {
   const transactionArchiveRepository = new TransactionArchiveRepository(db.collection(TRANSACTIONS_ARCHIVE_COLLECTION));
   const reconciliationRepository = new ReconciliationRepository(db.collection(RECONCILIATION_QUEUE_COLLECTION));
 
-  const clientService = new ClientService(clientRepository, configAuditRepository);
+  const clientService = new ClientService(clientRepository, configAuditRepository, registryRepository, limitDefinitionRepository);
   const configCache = new ConfigCache(registryRepository, limitDefinitionRepository);
   const registryService = new RegistryService(registryRepository, limitsAuditRepository, clientService, configCache);
   const limitDefinitionService = new LimitDefinitionService(
@@ -65,6 +65,7 @@ export function createApp(db) {
     registryRepository,
     registryService,
     configCache,
+    clientService,
   );
   const metricsService = new MetricsService();
   const counterEngineService = new CounterEngineService(counterRepository, configCache, { metricsService });

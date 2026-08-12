@@ -22,7 +22,7 @@ export class TransactionArchiveRepository extends TenantScopedRepository {
     }
   }
 
-  async findByTransactionId(clientId, transactionId) {
-    return this.findOne(clientId, { _id: { clientId, transactionId } }, PRIMARY_READ_OPTS);
+  async findByTransactionId(clientId, direction, transactionId) {
+    return this.findOne(clientId, { _id: { clientId, direction, transactionId } }, PRIMARY_READ_OPTS);
   }
 }

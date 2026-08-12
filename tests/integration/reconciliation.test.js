@@ -23,7 +23,7 @@ const CLOSED_WINDOW_NOW = new Date('2020-01-01T00:00:00Z');
 async function seedRegistry(db, clientId, dimensions) {
   const now = new Date();
   const normalized = validateAndNormalizeRegistry(dimensions, { previousRegistry: null, timezone: TZ, now });
-  const doc = buildRegistryDocument({ clientId, allowedDimensions: normalized, configVersion: 1, limitsVersion: 1, actor: 'test', now });
+  const doc = buildRegistryDocument({ clientId, directions: { OUTWARD: { allowedDimensions: normalized } }, configVersion: 1, limitsVersion: 1, actor: 'test', now });
   await db.collection(CLIENT_CONFIGS_COLLECTION).insertOne(doc);
 }
 
@@ -31,7 +31,7 @@ const EFFECTIVE_FROM_PAST = '2010-01-01T00:00:00Z';
 
 async function seedLimit(db, clientId, { dimensionCode, windowType, thresholdAmount, thresholdCount, scope }) {
   const now = new Date();
-  const normalized = validateLimitDefinitionCreate({ dimensionCode, windowType, thresholdAmount, thresholdCount, scope, effectiveFrom: EFFECTIVE_FROM_PAST });
+  const normalized = validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode, windowType, thresholdAmount, thresholdCount, scope, effectiveFrom: EFFECTIVE_FROM_PAST });
   const doc = buildLimitDefinitionDocument({ clientId, normalized, actor: 'test', now });
   await db.collection(LIMITS_COLLECTION).insertOne({ ...doc, clientId });
 }
@@ -89,7 +89,7 @@ describe('Counter reconciliation sweeper — STORY-05-02 (integration, real Mong
     await seedLimit(db, clientId, { dimensionCode: 'GLOBAL', windowType: 'DAILY_CALENDAR', thresholdAmount: 1000000 });
     await harness.configCache.warm([clientId]);
 
-    const approved = await harness.transactionService.submit(clientId, { transactionId: 'RECON1', amount: 500 }, TZ, CLOSED_WINDOW_NOW);
+    const approved = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'RECON1', amount: 500 }, TZ, ['OUTWARD'], CLOSED_WINDOW_NOW);
     assert.equal(approved.body.data.status, 'APPROVED');
     const key = approved.body.data.appliedCounterKeys[0].key;
 
@@ -116,14 +116,14 @@ describe('Counter reconciliation sweeper — STORY-05-02 (integration, real Mong
     await seedLimit(db, clientId, { dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 1000000 });
     await harness.configCache.warm([clientId]);
 
-    const approved = await harness.transactionService.submit(clientId, { transactionId: 'RECON2', amount: 300, ucic: 'U1' }, TZ);
+    const approved = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'RECON2', amount: 300, ucic: 'U1'  }, TZ, ['OUTWARD']);
     assert.equal(approved.body.data.status, 'APPROVED');
     const key = approved.body.data.appliedCounterKeys.find((k) => k.dimensionCode === 'UCIC').key;
 
     // Corrupt to a balance too small to absorb the recorded decrement — the floor guard must refuse it.
     await db.collection(COUNTERS_COLLECTION).updateOne({ _id: key }, { $set: { amount: 50, count: 1 } });
 
-    const reversal = await harness.transactionService.reverseTransaction(clientId, 'RECON2');
+    const reversal = await harness.transactionService.reverseTransaction(clientId, 'OUTWARD', 'RECON2');
     assert.equal(reversal.httpStatus, 200);
     const reversedEntry = reversal.body.data.reversedCounters.find((r) => r.key === key);
     assert.equal(reversedEntry.floorGuardHeld, false);
@@ -149,11 +149,11 @@ describe('Counter reconciliation sweeper — STORY-05-02 (integration, real Mong
     await harness.configCache.warm([clientId]);
 
     // Real "now" — this window will not close for many hours; the counter document's expireAt is well in the future.
-    const approved = await harness.transactionService.submit(clientId, { transactionId: 'RECON3', amount: 300, ucic: 'U1' }, TZ);
+    const approved = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'RECON3', amount: 300, ucic: 'U1'  }, TZ, ['OUTWARD']);
     const key = approved.body.data.appliedCounterKeys.find((k) => k.dimensionCode === 'UCIC').key;
     await db.collection(COUNTERS_COLLECTION).updateOne({ _id: key }, { $set: { amount: 50, count: 1 } });
 
-    await harness.transactionService.reverseTransaction(clientId, 'RECON3');
+    await harness.transactionService.reverseTransaction(clientId, 'OUTWARD', 'RECON3');
     const { results } = await harness.reconciliationService.processQueue(new Date());
     const outcome = results.find((r) => r.counterKey === key)?.outcome;
     assert.ok(outcome);
@@ -175,8 +175,8 @@ describe('Counter reconciliation sweeper — STORY-05-02 (integration, real Mong
     await seedLimit(db, clientId, { dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 1000000 });
     await harness.configCache.warm([clientId]);
 
-    await harness.transactionService.submit(clientId, { transactionId: 'RECON4A', amount: 200, ucic: 'U1' }, TZ, CLOSED_WINDOW_NOW);
-    await harness.transactionService.submit(clientId, { transactionId: 'RECON4B', amount: 150, ucic: 'U2' }, TZ, CLOSED_WINDOW_NOW);
+    await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'RECON4A', amount: 200, ucic: 'U1' }, TZ, ['OUTWARD'], CLOSED_WINDOW_NOW);
+    await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'RECON4B', amount: 150, ucic: 'U2' }, TZ, ['OUTWARD'], CLOSED_WINDOW_NOW);
 
     const liveDocs = await db.collection(COUNTERS_COLLECTION).find({ clientId }).toArray();
     assert.ok(liveDocs.length >= 2, 'GLOBAL (sharded) and at least two UCIC counters must exist');
@@ -188,7 +188,7 @@ describe('Counter reconciliation sweeper — STORY-05-02 (integration, real Mong
 
   test('rolling-tier drift signals are always alert-only, never auto-corrected, regardless of trigger', async () => {
     const clientId = 'CLIENT_RECON_E';
-    const rollingKey = 'limit:CLIENT_RECON_E:UCIC:DAILY_ROLLING:U1';
+    const rollingKey = 'limit:CLIENT_RECON_E:OUTWARD:UCIC:DAILY_ROLLING:U1';
     await db.collection(COUNTERS_COLLECTION).insertOne({
       _id: rollingKey,
       clientId,
@@ -210,7 +210,7 @@ describe('Counter reconciliation sweeper — STORY-05-02 (integration, real Mong
 
   test('a targeted signal whose document has since been TTL-cleaned is treated as moot, not as drift', async () => {
     const clientId = 'CLIENT_RECON_F';
-    const goneKey = 'limit:CLIENT_RECON_F:GLOBAL:DAILY_CALENDAR:2020-01-01';
+    const goneKey = 'limit:CLIENT_RECON_F:OUTWARD:GLOBAL:DAILY_CALENDAR:2020-01-01';
     const doc = buildDriftSignalDocument({ clientId, counterKey: goneKey, tier: 'tier1', sourceTransactionId: 'GONE1', reason: 'COMPENSATION_FLOOR_GUARD_FAILED', now: new Date() });
     await harness.reconciliationRepository.enqueue(clientId, doc);
 

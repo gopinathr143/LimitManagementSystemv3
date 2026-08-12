@@ -8,6 +8,7 @@ import {
   REGISTRY_DIMENSION_CODE_PATTERN,
   GLOBAL_DIMENSION_CODE,
   ROLLING_GRANULARITY,
+  DIRECTION,
 } from '../constants/index.js';
 
 export const CLIENT_CONFIGS_COLLECTION = 'clientConfigs';
@@ -301,18 +302,42 @@ export function findDimension(registrySnapshot, dimensionCode) {
   return registrySnapshot?.allowedDimensions?.find((dim) => dim.code === dimensionCode) ?? null;
 }
 
-export function buildRegistryDocument({ clientId, allowedDimensions, configVersion, limitsVersion, actor, now }) {
+/**
+ * BRD §4.3 / STORY-08-03 — the per-client `clientConfigs` document root now
+ * carries a `directions` map (`{OUTWARD: {allowedDimensions}, INWARD: {...}}`)
+ * instead of a single top-level `allowedDimensions`. Each direction's inner
+ * shape is byte-identical to the pre-EPIC-08 document — `findDimension`,
+ * `deriveWindowState`, `isWindowEnforced`, `resolveShardFactorForRead/Write`
+ * all operate on that inner shape unchanged; only the ONE extra level of
+ * nesting (selecting a direction first) is new.
+ */
+export function buildRegistryDocument({ clientId, directions, configVersion, limitsVersion, actor, now }) {
   return {
     _id: clientId,
     clientId,
     configVersion,
     limitsVersion,
-    allowedDimensions,
+    directions,
     createdBy: actor,
     updatedBy: actor,
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/**
+ * STORY-08-03 AC3 — "a legacy configuration with a top-level dimension list
+ * and no direction map normalises to an outward-only registry and existing
+ * outward enforcement is unchanged." Applied once, at the repository
+ * boundary, so every downstream consumer (service, cache, controller) only
+ * ever sees the new shape.
+ */
+export function normalizeRegistryDoc(doc) {
+  if (!doc || doc.directions) {
+    return doc;
+  }
+  const { allowedDimensions, ...rest } = doc;
+  return { ...rest, directions: { [DIRECTION.OUTWARD]: { allowedDimensions: allowedDimensions ?? [] } } };
 }
 
 export function freezeRegistry(registryDoc) {

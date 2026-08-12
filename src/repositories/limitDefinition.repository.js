@@ -19,8 +19,11 @@ export class LimitDefinitionRepository extends TenantScopedRepository {
     return this.findOne(clientId, { _id: new ObjectId(id) });
   }
 
-  async listAll(clientId, { dimensionCode, windowType } = {}) {
+  async listAll(clientId, { direction, dimensionCode, windowType } = {}) {
     const filter = {};
+    if (direction) {
+      filter.direction = direction;
+    }
     if (dimensionCode) {
       filter.dimensionCode = dimensionCode;
     }

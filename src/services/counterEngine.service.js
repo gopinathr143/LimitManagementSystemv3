@@ -99,9 +99,9 @@ export class CounterEngineService {
    * missing GLOBAL definition fails closed. For every other dimension,
    * "no definition" means "Unlimited" (§2.3), same as any other window.
    */
-  checkPerTransaction(clientId, { dimensionCode = GLOBAL_DIMENSION_CODE, attributeMap = {}, txnAmount, now = new Date() }) {
-    const definitions = this.configCache.getDefinitions(clientId) ?? [];
-    const definition = findApplicableDefinition(definitions, dimensionCode, PER_TXN_WINDOW_TYPE, attributeMap, now);
+  checkPerTransaction(clientId, { direction, dimensionCode = GLOBAL_DIMENSION_CODE, attributeMap = {}, txnAmount, now = new Date() }) {
+    const definitions = this.configCache.getDefinitions(clientId, direction) ?? [];
+    const definition = findApplicableDefinition(definitions, direction, dimensionCode, PER_TXN_WINDOW_TYPE, attributeMap, now);
 
     if (!definition) {
       if (dimensionCode === GLOBAL_DIMENSION_CODE) {
@@ -134,9 +134,9 @@ export class CounterEngineService {
    * returned outcome, not a thrown error, so `withTransientRetry` never
    * sees it and consumes no backoff on the breach path (AC3).
    */
-  async checkAndIncrementTier1(clientId, { dimensionCode, windowType, attributeValues, timezone, txnAmount, thresholdAmount, thresholdCount, now = new Date() }) {
+  async checkAndIncrementTier1(clientId, { direction, dimensionCode, windowType, attributeValues, timezone, txnAmount, thresholdAmount, thresholdCount, now = new Date() }) {
     const { windowBucket, expireAt } = resolveWindowBucket(windowType, timezone, now);
-    const key = buildCounterKey({ clientId, dimensionCode, windowType, attributeValues, windowBucket });
+    const key = buildCounterKey({ clientId, direction, dimensionCode, windowType, attributeValues, windowBucket });
     const amountDelta = txnAmount;
     const countDelta = 1;
 
@@ -193,9 +193,9 @@ export class CounterEngineService {
    * lives here, not in the caller, so it is computed the same way on every
    * call site.
    */
-  async checkAndIncrementTier2(clientId, { dimensionCode, windowType, attributeValues, timezone, windowEntry, txnAmount, thresholdAmount, thresholdCount, now = new Date() }) {
+  async checkAndIncrementTier2(clientId, { direction, dimensionCode, windowType, attributeValues, timezone, windowEntry, txnAmount, thresholdAmount, thresholdCount, now = new Date() }) {
     const { windowBucket, expireAt } = resolveWindowBucket(windowType, timezone, now);
-    const baseKey = buildCounterKey({ clientId, dimensionCode, windowType, attributeValues, windowBucket });
+    const baseKey = buildCounterKey({ clientId, direction, dimensionCode, windowType, attributeValues, windowBucket });
 
     const shardFactorForRead = resolveShardFactorForRead(windowEntry, now);
     const shardFactorForWrite = resolveShardFactorForWrite(windowEntry, now);
@@ -230,9 +230,9 @@ export class CounterEngineService {
   }
 
   /** BRD §4.2.2 "logical total = sum of that client's buckets" — a direct (uncached) read, for callers that need the exact current total rather than the bounded-staleness cached one (e.g. audit, reconciliation). */
-  async readTier2Total(clientId, { dimensionCode, windowType, attributeValues, timezone, windowEntry, now = new Date() }) {
+  async readTier2Total(clientId, { direction, dimensionCode, windowType, attributeValues, timezone, windowEntry, now = new Date() }) {
     const { windowBucket } = resolveWindowBucket(windowType, timezone, now);
-    const baseKey = buildCounterKey({ clientId, dimensionCode, windowType, attributeValues, windowBucket });
+    const baseKey = buildCounterKey({ clientId, direction, dimensionCode, windowType, attributeValues, windowBucket });
     const shardFactorForRead = resolveShardFactorForRead(windowEntry, now);
     const readShardKeys = Array.from({ length: shardFactorForRead }, (_, i) => `${baseKey}#${i}`);
     return this.counterRepository.sumKeys(clientId, readShardKeys);
@@ -244,8 +244,8 @@ export class CounterEngineService {
    * pruned/merged `buckets` come back from the SAME round trip — no
    * second read is needed for the audit (AC3).
    */
-  async checkAndIncrementRolling(clientId, { dimensionCode, attributeValues, txnAmount, thresholdAmount, thresholdCount, granularity = 'HOUR', now = new Date() }) {
-    const key = buildRollingKey({ clientId, dimensionCode, attributeValues });
+  async checkAndIncrementRolling(clientId, { direction, dimensionCode, attributeValues, txnAmount, thresholdAmount, thresholdCount, granularity = 'HOUR', now = new Date() }) {
+    const key = buildRollingKey({ clientId, direction, dimensionCode, attributeValues });
     const currentBucketLabel = rollingBucketLabel(now, granularity);
     const oldestValidBucketLabel = rollingHorizonLabel(now, granularity);
     const amountDelta = txnAmount;
@@ -291,8 +291,8 @@ export class CounterEngineService {
   }
 
   /** BRD §4.2.5 "hot dimensions... reverts to Tier-2 soft semantics" — sharded rolling: unconditional per-shard bucket update, still self-pruning. */
-  async checkAndIncrementRollingSharded(clientId, { dimensionCode, attributeValues, windowEntry, txnAmount, thresholdAmount, thresholdCount, granularity = 'HOUR', now = new Date() }) {
-    const baseKey = buildRollingKey({ clientId, dimensionCode, attributeValues });
+  async checkAndIncrementRollingSharded(clientId, { direction, dimensionCode, attributeValues, windowEntry, txnAmount, thresholdAmount, thresholdCount, granularity = 'HOUR', now = new Date() }) {
+    const baseKey = buildRollingKey({ clientId, direction, dimensionCode, attributeValues });
     const currentBucketLabel = rollingBucketLabel(now, granularity);
     const oldestValidBucketLabel = rollingHorizonLabel(now, granularity);
     const amountDelta = txnAmount;
@@ -337,8 +337,8 @@ export class CounterEngineService {
   }
 
   /** Direct (uncached) read across every rolling shard, pruned to the live horizon — for audit/reconciliation. */
-  async readRollingShardedTotal(clientId, { dimensionCode, attributeValues, windowEntry, granularity = 'HOUR', now = new Date() }) {
-    const baseKey = buildRollingKey({ clientId, dimensionCode, attributeValues });
+  async readRollingShardedTotal(clientId, { direction, dimensionCode, attributeValues, windowEntry, granularity = 'HOUR', now = new Date() }) {
+    const baseKey = buildRollingKey({ clientId, direction, dimensionCode, attributeValues });
     const oldestValidBucketLabel = rollingHorizonLabel(now, granularity);
     const shardFactorForRead = resolveShardFactorForRead(windowEntry, now);
     const readShardKeys = Array.from({ length: shardFactorForRead }, (_, i) => `${baseKey}#${i}`);

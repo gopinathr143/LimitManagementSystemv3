@@ -21,9 +21,10 @@
                   "validator": {
                     "$jsonSchema": {
                       "bsonType": "object",
-                      "required": ["clientId", "dimensionCode", "windowType", "currency", "isActive", "effectiveFrom", "definitionVersion", "createdAt", "updatedAt"],
+                      "required": ["clientId", "direction", "dimensionCode", "windowType", "currency", "isActive", "effectiveFrom", "definitionVersion", "createdAt", "updatedAt"],
                       "properties": {
                         "clientId": { "bsonType": "string" },
+                        "direction": { "enum": ["OUTWARD", "INWARD"], "description": "STORY-08-05 AC3 — immutable after creation" },
                         "dimensionCode": { "bsonType": "string" },
                         "scope": { "bsonType": ["object", "null"] },
                         "windowType": { "enum": ["PER_TXN", "DAILY_CALENDAR", "DAILY_ROLLING", "MONTHLY"] },

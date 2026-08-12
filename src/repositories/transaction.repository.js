@@ -5,9 +5,11 @@ import { TRANSACTION_STATUS, TERMINAL_TRANSACTION_STATUSES } from '../constants/
 const MONGO_DUPLICATE_KEY = 11000;
 
 /**
- * BRD §3.1 — the idempotency mutex. `_id` is the compound
- * `{clientId, transactionId}` primary key, so the unique index that makes
- * this a true mutex needs no secondary index (STORY-04-01 DoD).
+ * BRD §3.1 / STORY-08-02 — the idempotency mutex. `_id` is the compound
+ * `{clientId, direction, transactionId}` primary key, so the unique index
+ * that makes this a true mutex needs no secondary index (STORY-04-01 DoD) —
+ * and an outward and an inward transaction sharing the identical
+ * transactionId now claim genuinely separate mutexes (AC3/UAT 50).
  *
  * BRD §4.6 — "the claim insert and status resolution use w:majority, since
  * `transactions` is the system of record." Every write here uses
@@ -23,23 +25,23 @@ export class TransactionRepository extends TenantScopedRepository {
       if (error?.code !== MONGO_DUPLICATE_KEY) {
         throw error;
       }
-      const existing = await this.findByTransactionId(clientId, doc.transactionId);
+      const existing = await this.findByTransactionId(clientId, doc.direction, doc.transactionId);
       return { claimed: false, existing };
     }
   }
 
   /** Guarded on `status: PENDING` so only the claim's owner can resolve it — a second resolve attempt is a no-op (`matchedCount === 0`). */
-  async resolve(clientId, transactionId, setFields) {
+  async resolve(clientId, direction, transactionId, setFields) {
     return this.updateOne(
       clientId,
-      { _id: { clientId, transactionId }, status: TRANSACTION_STATUS.PENDING },
+      { _id: { clientId, direction, transactionId }, status: TRANSACTION_STATUS.PENDING },
       { $set: setFields },
       MAJORITY_WRITE_OPTS,
     );
   }
 
-  async findByTransactionId(clientId, transactionId) {
-    return this.findOne(clientId, { _id: { clientId, transactionId } }, PRIMARY_READ_OPTS);
+  async findByTransactionId(clientId, direction, transactionId) {
+    return this.findOne(clientId, { _id: { clientId, direction, transactionId } }, PRIMARY_READ_OPTS);
   }
 
   /**
@@ -51,10 +53,10 @@ export class TransactionRepository extends TenantScopedRepository {
    * result means the filter didn't match — the caller distinguishes
    * already-reversed / non-reversible / non-existent via a follow-up read.
    */
-  async reverseIfApproved(clientId, transactionId, { reason, now }) {
+  async reverseIfApproved(clientId, direction, transactionId, { reason, now }) {
     return this.findOneAndUpdate(
       clientId,
-      { _id: { clientId, transactionId }, status: TRANSACTION_STATUS.APPROVED },
+      { _id: { clientId, direction, transactionId }, status: TRANSACTION_STATUS.APPROVED },
       { $set: { status: TRANSACTION_STATUS.REVERSED, reversedAt: now, updatedAt: now, reversalReason: reason ?? null } },
       { returnDocument: 'before', ...MAJORITY_WRITE_OPTS },
     );
@@ -102,8 +104,8 @@ export class TransactionRepository extends TenantScopedRepository {
    * reconciliation sweeper (not yet built): a crashed request may have
    * applied increments this process could never compensate.
    */
-  async abandon(clientId, transactionId, now) {
-    return this.resolve(clientId, transactionId, {
+  async abandon(clientId, direction, transactionId, now) {
+    return this.resolve(clientId, direction, transactionId, {
       status: TRANSACTION_STATUS.ABANDONED,
       abandonedAt: now,
       updatedAt: now,
@@ -125,7 +127,7 @@ export class TransactionRepository extends TenantScopedRepository {
   }
 
   /** The archival sweep's second step, only ever called after the copy into the archive collection has already succeeded (never the reverse order — see ArchivalService). */
-  async deleteArchived(clientId, transactionId) {
-    return this.deleteOne(clientId, { _id: { clientId, transactionId } }, MAJORITY_WRITE_OPTS);
+  async deleteArchived(clientId, direction, transactionId) {
+    return this.deleteOne(clientId, { _id: { clientId, direction, transactionId } }, MAJORITY_WRITE_OPTS);
   }
 }

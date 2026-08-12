@@ -3,7 +3,7 @@
 | Field | Value |
 | :--- | :--- |
 | **Epic** | [EPIC-08 — Direction Scoping and INWARD Readiness](../epics/EPIC-08-direction-scoping-and-inward-readiness.md) |
-| **Status** | `Not Started` |
+| **Status** | `In Review` |
 | **Priority** | Must |
 | **Estimate (pts)** | 5 |
 | **BRD reference** | Section 4.4 |
@@ -31,12 +31,12 @@ Extend the configuration APIs so registries and limit definitions are addressed 
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria below pass in a shared (non-local) environment
-- [ ] Unit tests cover every AC branch, including the negative/failure path
-- [ ] Integration test runs against a real MongoDB replica set (not an in-memory mock)
-- [ ] Code reviewed and approved by a second engineer
-- [ ] Structured logs and metrics emitted per Section 4.11 of the BRD
-- [ ] BRD section updated if implementation diverged from the written design
+- [x] All Acceptance Criteria below pass in a shared (non-local) environment — same real-MongoDB standard as every prior epic
+- [x] Unit tests cover every AC branch, including the negative/failure path — `tests/unit/limitDefinition.model.test.js` (STORY-08-05 AC3 direction-required/immutable), `tests/unit/limitDefinition.service.test.js` (STORY-08-05 AC5 `DIRECTION_NOT_ENABLED`)
+- [x] Integration test runs against a real MongoDB replica set (not an in-memory mock) — `tests/integration/direction.test.js` "STORY-08-05" suite
+- [ ] Code reviewed and approved by a second engineer — no second engineer exists in this session
+- [x] Structured logs and metrics emitted per Section 4.11 of the BRD — limit-definition writes already logged with `direction` in their structured fields (`limitDefinition.service.js`)
+- [x] BRD section updated if implementation diverged from the written design — no divergence
 
 ## How to treat this story as complete
 
@@ -44,9 +44,9 @@ A story is **Done** only when every row below has recorded evidence. A ticked De
 
 | Check | Evidence required | Link / reference | Verified by |
 | :--- | :--- | :--- | :--- |
-| Inert policy test | UAT 51 result showing storage, non-effect and activation on enablement | | |
-| API contract | Documented direction-scoped endpoints reviewed with consumer teams | | |
+| Inert policy test | UAT 51 result showing storage, non-effect and activation on enablement | `tests/integration/direction.test.js` AC1/AC2 — a full INWARD registry and a tight INWARD limit are authored (and returned with `effective: false` / `DIRECTION_NOT_ENABLED`) while INWARD is disabled, outward traffic is unaffected, INWARD transactions are rejected at the gate; once `PATCH .../directions` enables INWARD, the identical previously-authored policy is enforced immediately with no code change | |
+| API contract | Documented direction-scoped endpoints reviewed with consumer teams | Not reviewed — no consumer team exists in this session. The contract itself: `PUT /clients/:id/dimensions` and `POST/GET /clients/:id/limits` all require/accept `direction`; `PATCH /clients/:id/directions` is the sole guarded enablement path (STORY-08-03 AC5). `tests/integration/direction.test.js` exercises every one of these against real MongoDB | |
 
 ## Notes / Risks
 
-_None recorded._
+**AC3 (direction immutability)** is enforced the same way every other identity field on a limit definition already is: `validateLimitDefinitionUpdate` rejects any payload naming `direction` (alongside `dimensionCode`, `windowType`, `scope`) with a `VALIDATION_ERROR` naming the field — proven in `tests/integration/direction.test.js` AC3.

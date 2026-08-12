@@ -10,11 +10,14 @@
 
     <!--
         BRD §3.1/§3.2 — the idempotency claim and system-of-record audit
-        trail. `_id` is the compound `{clientId, transactionId}` object —
-        the primary-key index IS the mutex (STORY-04-01 DoD: "needs no
-        secondary index"). The one secondary index here (status+claimedAt)
-        is justified against a named query pattern per BRD §4.7's index
-        discipline: the stale-claim reaper's periodic scan (STORY-04-02).
+        trail. `_id` is the compound `{clientId, direction, transactionId}`
+        object (direction added STORY-08-02) — the primary-key index IS the
+        mutex (STORY-04-01 DoD: "needs no secondary index"), and an outward
+        and an inward transaction sharing the identical transactionId now
+        claim genuinely separate mutexes. The one secondary index here
+        (status+claimedAt) is justified against a named query pattern per
+        BRD §4.7's index discipline: the stale-claim reaper's periodic scan
+        (STORY-04-02).
     -->
     <changeSet id="001-create-transactions-collection" author="imps-velocity">
         <mongodb:createCollection collectionName="transactions">
@@ -23,10 +26,11 @@
                   "validator": {
                     "$jsonSchema": {
                       "bsonType": "object",
-                      "required": ["_id", "clientId", "transactionId", "status", "requestData", "claimedAt", "updatedAt"],
+                      "required": ["_id", "clientId", "direction", "transactionId", "status", "requestData", "claimedAt", "updatedAt"],
                       "properties": {
                         "_id": { "bsonType": "object" },
                         "clientId": { "bsonType": "string" },
+                        "direction": { "enum": ["OUTWARD", "INWARD"] },
                         "transactionId": { "bsonType": "string" },
                         "status": { "enum": ["PENDING", "APPROVED", "REJECTED", "REVERSED", "ABANDONED", "SYSTEM_FAILURE"] },
                         "requestData": { "bsonType": "object" },

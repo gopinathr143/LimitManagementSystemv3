@@ -34,7 +34,7 @@ describe('CounterEngineService rolling window — STORY-03-06 (integration, real
     const EXPECTED_APPROVALS = THRESHOLD / TXN_AMOUNT; // 10
     const CONCURRENT_REQUESTS = 30;
 
-    const opts = { dimensionCode: 'UCIC', attributeValues: ['U_ROLLING_HOT'], txnAmount: TXN_AMOUNT, thresholdAmount: THRESHOLD };
+    const opts = { direction: 'OUTWARD', dimensionCode: 'UCIC', attributeValues: ['U_ROLLING_HOT'], txnAmount: TXN_AMOUNT, thresholdAmount: THRESHOLD };
 
     const results = await Promise.all(Array.from({ length: CONCURRENT_REQUESTS }, () => engine.checkAndIncrementRolling('CLIENT_R1', opts)));
     const approved = results.filter((r) => r.passed).length;
@@ -48,7 +48,7 @@ describe('CounterEngineService rolling window — STORY-03-06 (integration, real
   });
 
   test('AC2/UAT 32: expired sub-buckets are pruned on the next update and the document stays bounded', async () => {
-    const key = 'limit:CLIENT_R2:UCIC:DAILY_ROLLING:U_PRUNE';
+    const key = 'limit:CLIENT_R2:OUTWARD:UCIC:DAILY_ROLLING:U_PRUNE';
     const now = new Date('2026-08-10T12:00:00Z');
 
     // Seed 30 hourly buckets spanning far past the 24h horizon (simulating an old, un-pruned document).
@@ -63,7 +63,7 @@ describe('CounterEngineService rolling window — STORY-03-06 (integration, real
     const before = await db.collection(COUNTERS_COLLECTION).findOne({ _id: key });
     assert.equal(Object.keys(before.buckets).length, 30);
 
-    const result = await engine.checkAndIncrementRolling('CLIENT_R2', { dimensionCode: 'UCIC', attributeValues: ['U_PRUNE'], txnAmount: 5, thresholdAmount: 1000000, now });
+    const result = await engine.checkAndIncrementRolling('CLIENT_R2', { direction: 'OUTWARD', dimensionCode: 'UCIC', attributeValues: ['U_PRUNE'], txnAmount: 5, thresholdAmount: 1000000, now });
     assert.equal(result.passed, true);
 
     const after = await db.collection(COUNTERS_COLLECTION).findOne({ _id: key });
@@ -71,7 +71,7 @@ describe('CounterEngineService rolling window — STORY-03-06 (integration, real
   });
 
   test('AC3: a breach returns _applied:false and exact current velocity in the same round trip', async () => {
-    const opts = { dimensionCode: 'UCIC', attributeValues: ['U_BREACH'], thresholdAmount: 1000 };
+    const opts = { direction: 'OUTWARD', dimensionCode: 'UCIC', attributeValues: ['U_BREACH'], thresholdAmount: 1000 };
     await engine.checkAndIncrementRolling('CLIENT_R3', { ...opts, txnAmount: 900 });
     const breach = await engine.checkAndIncrementRolling('CLIENT_R3', { ...opts, txnAmount: 200 });
     assert.equal(breach.passed, false);
@@ -79,7 +79,7 @@ describe('CounterEngineService rolling window — STORY-03-06 (integration, real
   });
 
   test('AC4: the rolling window does not reset at a calendar-day boundary', async () => {
-    const opts = { dimensionCode: 'UCIC', attributeValues: ['U_MIDNIGHT'], thresholdAmount: 1000 };
+    const opts = { direction: 'OUTWARD', dimensionCode: 'UCIC', attributeValues: ['U_MIDNIGHT'], thresholdAmount: 1000 };
     const beforeMidnight = new Date('2026-08-10T23:50:00Z');
     await engine.checkAndIncrementRolling('CLIENT_R4', { ...opts, txnAmount: 900, now: beforeMidnight });
 
@@ -89,7 +89,7 @@ describe('CounterEngineService rolling window — STORY-03-06 (integration, real
   });
 
   test('AC5: MINUTE granularity tightens precision and the document remains within size limits', async () => {
-    const opts = { dimensionCode: 'ACCOUNT', attributeValues: ['A_MINUTE'], thresholdAmount: 1000000, granularity: 'MINUTE' };
+    const opts = { direction: 'OUTWARD', dimensionCode: 'ACCOUNT', attributeValues: ['A_MINUTE'], thresholdAmount: 1000000, granularity: 'MINUTE' };
     const now = new Date('2026-08-10T12:00:00Z');
 
     for (let i = 0; i < 30; i += 1) {
@@ -98,7 +98,7 @@ describe('CounterEngineService rolling window — STORY-03-06 (integration, real
       await engine.checkAndIncrementRolling('CLIENT_R5', { ...opts, txnAmount: 10, now: at });
     }
 
-    const key = 'limit:CLIENT_R5:ACCOUNT:DAILY_ROLLING:A_MINUTE';
+    const key = 'limit:CLIENT_R5:OUTWARD:ACCOUNT:DAILY_ROLLING:A_MINUTE';
     const doc = await db.collection(COUNTERS_COLLECTION).findOne({ _id: key });
     assert.equal(Object.keys(doc.buckets).length, 30, 'minute granularity must produce one sub-bucket per minute, not per hour');
     assert.ok(/^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}$/.test(Object.keys(doc.buckets)[0]));
@@ -107,12 +107,12 @@ describe('CounterEngineService rolling window — STORY-03-06 (integration, real
   test('AC6: a hot rolling dimension shards and reverts to soft/unconditional semantics', async () => {
     const now = new Date();
     const windowEntry = windowEntryWithShardFactor(8, now);
-    const opts = { dimensionCode: 'GLOBAL', attributeValues: [], windowEntry, txnAmount: 10, thresholdAmount: 100000, now };
+    const opts = { direction: 'OUTWARD', dimensionCode: 'GLOBAL', attributeValues: [], windowEntry, txnAmount: 10, thresholdAmount: 100000, now };
 
     const results = await Promise.all(Array.from({ length: 50 }, () => engine.checkAndIncrementRollingSharded('CLIENT_R6', opts)));
     assert.ok(results.every((r) => r.passed), 'sharded rolling is soft/unconditional — nothing should be rejected here');
 
-    const total = await engine.readRollingShardedTotal('CLIENT_R6', { dimensionCode: 'GLOBAL', attributeValues: [], windowEntry, now });
+    const total = await engine.readRollingShardedTotal('CLIENT_R6', { direction: 'OUTWARD', dimensionCode: 'GLOBAL', attributeValues: [], windowEntry, now });
     assert.equal(total.amount, 500);
     assert.equal(total.count, 50);
 
@@ -121,7 +121,7 @@ describe('CounterEngineService rolling window — STORY-03-06 (integration, real
   });
 
   test('compensateRolling: reverses the exact recorded bucket, and a pruned/drained bucket is reported as a drift signal', async () => {
-    const opts = { dimensionCode: 'UCIC', attributeValues: ['U_REVERSE'], txnAmount: 300, thresholdAmount: 1000 };
+    const opts = { direction: 'OUTWARD', dimensionCode: 'UCIC', attributeValues: ['U_REVERSE'], txnAmount: 300, thresholdAmount: 1000 };
     const applied = await engine.checkAndIncrementRolling('CLIENT_R7', opts);
     assert.equal(applied.passed, true);
 

@@ -38,7 +38,7 @@ A ticked Definition of Done without recorded evidence does not close a story. An
 | [EPIC-05](epics/EPIC-05-reversal-and-reconciliation.md) | Reversal and Reconciliation | 2 | 16 | 0 / 2 | `In Review` |
 | [EPIC-06](epics/EPIC-06-operations-resilience-and-compliance.md) | Operations, Resilience and Compliance | 4 | 23 | 0 / 4 | `In Review` |
 | [EPIC-07](epics/EPIC-07-performance-and-acceptance-certification.md) | Performance and Acceptance Certification | 3 | 18 | 0 / 3 | `In Review` |
-| [EPIC-08](epics/EPIC-08-direction-scoping-and-inward-readiness.md) | Direction Scoping and INWARD Readiness | 6 | 34 | 0 / 6 | `Not Started` |
+| [EPIC-08](epics/EPIC-08-direction-scoping-and-inward-readiness.md) | Direction Scoping and INWARD Readiness | 6 | 34 | 5 / 6 | `In Review` |
 
 ---
 
@@ -52,7 +52,7 @@ The dependency chain is real, not advisory. Tenancy is the foundation because re
 4. **EPIC-05** and **EPIC-06** — reversal, reconciliation and operations, which can run in parallel once the engine is stable.
 5. **EPIC-07** — certification last, since it proves the whole.
 
-**EPIC-08 is not last.** Its two structural stories, STORY-08-01 and STORY-08-02, must land **alongside EPIC-03 and EPIC-04**, because the direction segment belongs in the counter key and the transaction identity before any counter data exists. The remaining direction stories can follow at leisure, but those two cannot be deferred without creating a migration.
+**EPIC-08 is not last** in principle. Its two structural stories, STORY-08-01 and STORY-08-02, ideally land **alongside EPIC-03 and EPIC-04**, because the direction segment belongs in the counter key and the transaction identity before any counter data exists. In this session, EPICs were delivered in strict numeric order per the actual working instruction, so EPIC-08 landed after EPIC-07 instead — a retrofit, not a from-the-start build. It was completed without a data migration only because no production counter/transaction data existed yet in any environment this session touched; a real deployment that had already accumulated OUTWARD-only data would need an explicit backfill or cutover plan for the new `direction` segment, which this session did not need to write.
 
 ---
 
@@ -159,9 +159,9 @@ These are unresolved inputs from the BRD, not engineering decisions. Each blocks
 
 | Story | Title | Pri | Est | Acceptance cases | Status | Completed on | Verified by |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| [STORY-08-01](stories/STORY-08-01-direction-resolution-validation-and-fail-closed-gating.md) | Direction resolution validation and fail-closed gating | Must | 5 | UAT 49 | `Not Started` | | |
-| [STORY-08-02](stories/STORY-08-02-direction-segment-in-counter-keys-and-transaction-identity.md) | Direction segment in counter keys and transaction identity | Must | 8 | UAT 45, UAT 50 | `Not Started` | | |
-| [STORY-08-03](stories/STORY-08-03-per-direction-dimension-registry-with-backward-compatible-loading.md) | Per-direction dimension registry with backward compatible loading | Must | 8 | UAT 46, UAT 52 | `Not Started` | | |
-| [STORY-08-04](stories/STORY-08-04-combined-direction-scope-for-total-throughput-controls.md) | Combined direction scope for total throughput controls | Should | 5 | UAT 47, UAT 48 | `Not Started` | | |
-| [STORY-08-05](stories/STORY-08-05-direction-scoped-configuration-apis-and-inert-inward-policy.md) | Direction-scoped configuration APIs and inert inward policy | Must | 5 | UAT 51 | `Not Started` | | |
-| [STORY-08-06](stories/STORY-08-06-inward-capacity-and-sizing-assessment.md) | INWARD capacity and sizing assessment | Must | 3 | None (planning) | `Not Started` | | |
+| [STORY-08-01](stories/STORY-08-01-direction-resolution-validation-and-fail-closed-gating.md) | Direction resolution validation and fail-closed gating | Must | 5 | UAT 49 | `In Review` | | |
+| [STORY-08-02](stories/STORY-08-02-direction-segment-in-counter-keys-and-transaction-identity.md) | Direction segment in counter keys and transaction identity | Must | 8 | UAT 45, UAT 50 | `In Review` | | |
+| [STORY-08-03](stories/STORY-08-03-per-direction-dimension-registry-with-backward-compatible-loading.md) | Per-direction dimension registry with backward compatible loading | Must | 8 | UAT 46, UAT 52 | `In Review` | | |
+| [STORY-08-04](stories/STORY-08-04-combined-direction-scope-for-total-throughput-controls.md) | Combined direction scope for total throughput controls | Should | 5 | UAT 47, UAT 48 | `Blocked` | | |
+| [STORY-08-05](stories/STORY-08-05-direction-scoped-configuration-apis-and-inert-inward-policy.md) | Direction-scoped configuration APIs and inert inward policy | Must | 5 | UAT 51 | `In Review` | | |
+| [STORY-08-06](stories/STORY-08-06-inward-capacity-and-sizing-assessment.md) | INWARD capacity and sizing assessment | Must | 3 | None (planning) | `In Review` | | |

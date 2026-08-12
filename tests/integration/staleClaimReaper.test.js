@@ -27,8 +27,9 @@ describe('Stale pending claim reaper — STORY-04-02 (integration, real MongoDB 
 
   async function seedPendingClaim(clientId, transactionId, claimedAt) {
     await db.collection(TRANSACTIONS_COLLECTION).insertOne({
-      _id: { clientId, transactionId },
+      _id: { clientId, direction: 'OUTWARD', transactionId },
       clientId,
+      direction: 'OUTWARD',
       transactionId,
       status: 'PENDING',
       requestData: { amount: 100 },
@@ -46,13 +47,14 @@ describe('Stale pending claim reaper — STORY-04-02 (integration, real MongoDB 
     const result = await reaper.sweep(now);
     assert.equal(result.reaped, 1);
 
-    const doc = await repository.findByTransactionId('CLIENT_REAP_A', 'STALE-1');
+    const doc = await repository.findByTransactionId('CLIENT_REAP_A', 'OUTWARD', 'STALE-1');
     assert.equal(doc.status, 'ABANDONED');
 
     // A fresh retry of the same transactionId must now be acceptable — the claim doesn't block it forever.
     const claimAttempt = await repository.claim('CLIENT_REAP_A', {
-      _id: { clientId: 'CLIENT_REAP_A', transactionId: 'STALE-1-RETRY' },
+      _id: { clientId: 'CLIENT_REAP_A', direction: 'OUTWARD', transactionId: 'STALE-1-RETRY' },
       clientId: 'CLIENT_REAP_A',
+      direction: 'OUTWARD',
       transactionId: 'STALE-1-RETRY',
       status: 'PENDING',
       requestData: { amount: 100 },
@@ -67,7 +69,7 @@ describe('Stale pending claim reaper — STORY-04-02 (integration, real MongoDB 
     const now = new Date();
     await seedPendingClaim('CLIENT_REAP_B', 'STALE-2', new Date(now.getTime() - 120_000));
     await reaper.sweep(now);
-    const doc = await repository.findByTransactionId('CLIENT_REAP_B', 'STALE-2');
+    const doc = await repository.findByTransactionId('CLIENT_REAP_B', 'OUTWARD', 'STALE-2');
     assert.equal(doc.needsReconciliation, true);
   });
 
@@ -78,7 +80,7 @@ describe('Stale pending claim reaper — STORY-04-02 (integration, real MongoDB 
     const result = await reaper.sweep(now);
     assert.equal(result.reaped, 0);
 
-    const doc = await repository.findByTransactionId('CLIENT_REAP_C', 'FRESH-1');
+    const doc = await repository.findByTransactionId('CLIENT_REAP_C', 'OUTWARD', 'FRESH-1');
     assert.equal(doc.status, 'PENDING', 'a healthy in-flight request must not be reaped');
   });
 
@@ -87,7 +89,7 @@ describe('Stale pending claim reaper — STORY-04-02 (integration, real MongoDB 
     await seedPendingClaim('CLIENT_REAP_D', 'STALE-3', new Date(now.getTime() - 120_000));
     await reaper.sweep(now);
 
-    const count = await db.collection(TRANSACTIONS_COLLECTION).countDocuments({ _id: { clientId: 'CLIENT_REAP_D', transactionId: 'STALE-3' } });
+    const count = await db.collection(TRANSACTIONS_COLLECTION).countDocuments({ _id: { clientId: 'CLIENT_REAP_D', direction: 'OUTWARD', transactionId: 'STALE-3' } });
     assert.equal(count, 1, 'the document must still exist, only its status changed');
   });
 
@@ -96,12 +98,12 @@ describe('Stale pending claim reaper — STORY-04-02 (integration, real MongoDB 
     await seedPendingClaim('CLIENT_REAP_E', 'RACE-1', new Date(now.getTime() - 120_000));
 
     // Simulate the owning request completing normally just before the reaper's guarded write lands.
-    await repository.resolve('CLIENT_REAP_E', 'RACE-1', { status: 'APPROVED', updatedAt: now, resolvedAt: now });
+    await repository.resolve('CLIENT_REAP_E', 'OUTWARD', 'RACE-1', { status: 'APPROVED', updatedAt: now, resolvedAt: now });
 
     const result = await reaper.sweep(now);
     assert.equal(result.reaped, 0, 'the guard (status: PENDING) must prevent overwriting an already-resolved claim');
 
-    const doc = await repository.findByTransactionId('CLIENT_REAP_E', 'RACE-1');
+    const doc = await repository.findByTransactionId('CLIENT_REAP_E', 'OUTWARD', 'RACE-1');
     assert.equal(doc.status, 'APPROVED');
   });
 });

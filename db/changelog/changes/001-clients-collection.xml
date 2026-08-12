@@ -29,6 +29,7 @@
                         "name": { "bsonType": "string", "minLength": 1 },
                         "status": { "enum": ["ACTIVE", "SUSPENDED"] },
                         "timezone": { "bsonType": "string", "description": "IANA timezone name" },
+                        "enabledDirections": { "bsonType": ["array", "null"], "description": "STORY-08-01/§2.1.5 — subset of OUTWARD/INWARD this client may transact in; defaults to [OUTWARD]" },
                         "createdBy": { "bsonType": "string" },
                         "createdAt": { "bsonType": "date" },
                         "updatedAt": { "bsonType": "date" }

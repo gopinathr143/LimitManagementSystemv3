@@ -8,6 +8,7 @@ export const createClientRouter = (clientController) => {
   router.get('/', clientController.list);
   router.get('/:clientId', clientController.getByClientId);
   router.patch('/:clientId', clientController.update);
+  router.patch('/:clientId/directions', clientController.setEnabledDirections);
 
   return router;
 };

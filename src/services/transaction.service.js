@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { validateTransactionRequest, buildClaimDocument, extractAttributeMap, attributeMapToOrderedValues } from '../models/transaction.model.js';
 import { deriveWindowState, isWindowEnforced, findDimension } from '../models/registry.model.js';
 import { findApplicableDefinition } from '../models/limitDefinition.model.js';
-import { TRANSACTION_STATUS, TERMINAL_TRANSACTION_STATUSES, WINDOW_TYPE, WINDOW_STATE } from '../constants/index.js';
+import { TRANSACTION_STATUS, TERMINAL_TRANSACTION_STATUSES, WINDOW_TYPE, WINDOW_STATE, DIRECTION } from '../constants/index.js';
 import { AppError } from '../utils/AppError.js';
 import { logger } from '../config/logger.js';
 
@@ -14,6 +14,13 @@ const DAILY_WINDOWS_THEN_MONTHLY = [WINDOW_TYPE.DAILY_CALENDAR, WINDOW_TYPE.DAIL
  * defect fix), then runs the config-driven waterfall across the client's
  * declared dimensions in order (STORY-04-03), compensating everything
  * applied so far on the first breach (STORY-04-04's saga).
+ *
+ * STORY-08-01/08-02 — `direction` is threaded through every step: it is
+ * validated before the claim is even attempted (fail-closed, never
+ * defaulted), it is part of the claim's compound `_id` (an outward and an
+ * inward transaction with the identical transactionId claim genuinely
+ * separate mutexes), and it selects which direction's registry/definitions
+ * the waterfall evaluates against.
  */
 export class TransactionService {
   constructor(transactionRepository, configCache, counterEngineService, options = {}) {
@@ -30,40 +37,55 @@ export class TransactionService {
     this.transactionArchiveRepository = options.transactionArchiveRepository ?? null;
   }
 
-  /** BRD §3.1 — the mutex. `timezone` is the client's (already resolved by `resolveClientId` middleware — no extra lookup here). Returns a uniform `{httpStatus, body}`. */
-  async submit(clientId, payload, timezone, now = new Date()) {
+  /**
+   * BRD §3.1 — the mutex. `timezone` is the client's (already resolved by
+   * `resolveClientId` middleware — no extra lookup here). `enabledDirections`
+   * is the client's own enabled-direction set (also resolved by that same
+   * middleware) — STORY-08-01 AC3: a direction can be structurally valid and
+   * still rejected if this specific client hasn't had it enabled. Returns a
+   * uniform `{httpStatus, body}`.
+   */
+  async submit(clientId, payload, timezone, enabledDirections = [], now = new Date()) {
     const startedAt = process.hrtime.bigint();
-    const { transactionId, amount, attributes } = validateTransactionRequest(payload);
+    const { direction, transactionId, amount, attributes } = validateTransactionRequest(payload);
 
-    const claimDoc = buildClaimDocument({ clientId, transactionId, requestData: { amount, ...attributes }, now, instanceId: this.instanceId });
+    if (!enabledDirections.includes(direction)) {
+      logger.warn({ clientId, direction }, 'Transaction rejected: direction not enabled for this client');
+      return {
+        httpStatus: 403,
+        body: { success: false, error: { code: 'DIRECTION_NOT_ENABLED', message: `Direction '${direction}' is not enabled for client '${clientId}'.` } },
+      };
+    }
+
+    const claimDoc = buildClaimDocument({ clientId, direction, transactionId, requestData: { amount, ...attributes }, now, instanceId: this.instanceId });
     const claim = await this.transactionRepository.claim(clientId, claimDoc);
 
     if (!claim.claimed) {
       return this.#responseForExisting(claim.existing);
     }
 
-    logger.info({ clientId, transactionId }, 'Transaction claimed');
+    logger.info({ clientId, direction, transactionId }, 'Transaction claimed');
 
-    const outcome = await this.#runWaterfall(clientId, { transactionId, amount, attributes }, timezone, now);
+    const outcome = await this.#runWaterfall(clientId, { direction, transactionId, amount, attributes }, timezone, now);
 
     const resolveFields = this.#buildResolveFields(outcome, now);
     let resolveResult;
     try {
-      resolveResult = await this.transactionRepository.resolve(clientId, transactionId, resolveFields);
+      resolveResult = await this.transactionRepository.resolve(clientId, direction, transactionId, resolveFields);
     } catch (error) {
       // BRD §3.3 step 5 — the resolve write itself failed after retries: compensate everything applied and fail closed.
       await this.#compensateAll(clientId, outcome.appliedCounterKeys ?? [], transactionId);
       await this.transactionRepository
-        .resolve(clientId, transactionId, { status: TRANSACTION_STATUS.SYSTEM_FAILURE, updatedAt: now, resolvedAt: now })
-        .catch((innerError) => logger.error({ err: innerError, clientId, transactionId }, 'Best-effort SYSTEM_FAILURE resolve also failed'));
-      logger.error({ err: error, clientId, transactionId }, 'Resolve write failed after retries; compensated and marked SYSTEM_FAILURE');
+        .resolve(clientId, direction, transactionId, { status: TRANSACTION_STATUS.SYSTEM_FAILURE, updatedAt: now, resolvedAt: now })
+        .catch((innerError) => logger.error({ err: innerError, clientId, direction, transactionId }, 'Best-effort SYSTEM_FAILURE resolve also failed'));
+      logger.error({ err: error, clientId, direction, transactionId }, 'Resolve write failed after retries; compensated and marked SYSTEM_FAILURE');
       this.metricsService?.recordError(clientId, 'SYSTEM_FAILURE');
       this.#observeRequestLatency(startedAt);
       return { httpStatus: 500, body: { success: false, error: { code: 'SYSTEM_FAILURE', message: 'Unable to resolve transaction outcome.' } } };
     }
 
     if (resolveResult.matchedCount === 0) {
-      logger.warn({ clientId, transactionId }, 'Resolve matched no PENDING claim — already resolved by another path');
+      logger.warn({ clientId, direction, transactionId }, 'Resolve matched no PENDING claim — already resolved by another path');
     }
 
     this.metricsService?.recordDecision(clientId, outcome.status);
@@ -80,24 +102,26 @@ export class TransactionService {
   }
 
   /**
-   * BRD §3.2 AC3 — retrievable by the compound (clientId, transactionId)
-   * key, for status lookup and reversal. BRD §4.7 AC2 — once a record has
-   * aged out of the hot collection, the SAME lookup must still resolve it
-   * from the archive, so a consumer never needs to know which tier a
-   * record currently lives in.
+   * BRD §3.2 AC3 — retrievable by the compound (clientId, direction,
+   * transactionId) key, for status lookup and reversal. BRD §4.7 AC2 — once
+   * a record has aged out of the hot collection, the SAME lookup must still
+   * resolve it from the archive, so a consumer never needs to know which
+   * tier a record currently lives in.
    */
-  async getStatus(clientId, transactionId) {
-    const doc = await this.transactionRepository.findByTransactionId(clientId, transactionId);
+  async getStatus(clientId, direction, transactionId) {
+    // BRD §2.1.6 "API consequence" — status lookups carry the same single-direction-period leniency as reversal.
+    const resolvedDirection = direction ?? DIRECTION.OUTWARD;
+    const doc = await this.transactionRepository.findByTransactionId(clientId, resolvedDirection, transactionId);
     if (doc) {
       return this.#toResponseData(transactionId, doc);
     }
     if (this.transactionArchiveRepository) {
-      const archived = await this.transactionArchiveRepository.findByTransactionId(clientId, transactionId);
+      const archived = await this.transactionArchiveRepository.findByTransactionId(clientId, resolvedDirection, transactionId);
       if (archived) {
         return this.#toResponseData(transactionId, archived);
       }
     }
-    throw AppError.notFound(`Transaction '${transactionId}' not found for client '${clientId}'.`, 'TRANSACTION_NOT_FOUND');
+    throw AppError.notFound(`Transaction '${transactionId}' not found for client '${clientId}' direction '${resolvedDirection}'.`, 'TRANSACTION_NOT_FOUND');
   }
 
   /**
@@ -108,14 +132,21 @@ export class TransactionService {
    * exactly one of them decrementing anything (AC3). A flip that doesn't
    * match is not necessarily an error: it's the same idempotent-replay shape
    * used by `submit()` for `AC2`, applied to reversal instead of approval.
+   *
+   * STORY-08-02 notes — "during the single-direction period the reversal API
+   * may default a missing direction to outward... withdrawn as an announced
+   * step when a second direction is enabled, not silently." That leniency is
+   * implemented here (and ONLY here — submit() never defaults, per
+   * STORY-08-01 AC1) and is a single, obvious line to delete when it's time.
    */
-  async reverseTransaction(clientId, transactionId, reason, now = new Date()) {
-    const flipped = await this.transactionRepository.reverseIfApproved(clientId, transactionId, { reason, now });
+  async reverseTransaction(clientId, direction, transactionId, reason, now = new Date()) {
+    const resolvedDirection = direction ?? DIRECTION.OUTWARD;
+    const flipped = await this.transactionRepository.reverseIfApproved(clientId, resolvedDirection, transactionId, { reason, now });
 
     if (!flipped) {
-      const existing = await this.transactionRepository.findByTransactionId(clientId, transactionId);
+      const existing = await this.transactionRepository.findByTransactionId(clientId, resolvedDirection, transactionId);
       if (!existing) {
-        throw AppError.notFound(`Transaction '${transactionId}' not found for client '${clientId}'.`, 'TRANSACTION_NOT_FOUND');
+        throw AppError.notFound(`Transaction '${transactionId}' not found for client '${clientId}' direction '${resolvedDirection}'.`, 'TRANSACTION_NOT_FOUND');
       }
       if (existing.status === TRANSACTION_STATUS.REVERSED) {
         // AC2 — a repeated reversal call is a no-op, not an error; no counter is touched a second time.
@@ -133,8 +164,8 @@ export class TransactionService {
       };
     }
 
-    logger.info({ clientId, transactionId }, 'Transaction reversal claimed; decrementing applied counters');
-    const registry = this.configCache.getRegistry(clientId);
+    logger.info({ clientId, direction: resolvedDirection, transactionId }, 'Transaction reversal claimed; decrementing applied counters');
+    const registry = this.configCache.getRegistry(clientId, resolvedDirection);
     const reversedCounters = await this.#reverseAppliedKeys(clientId, transactionId, flipped.appliedCounterKeys ?? [], registry, now);
 
     return { httpStatus: 200, body: { success: true, data: { transactionId, status: TRANSACTION_STATUS.REVERSED, reversedCounters } } };
@@ -209,6 +240,9 @@ export class TransactionService {
 
   #toResponseData(transactionId, source) {
     const data = { transactionId, status: source.status };
+    if (source.direction) {
+      data.direction = source.direction;
+    }
     if (source.rejection) {
       data.rejection = source.rejection;
     }
@@ -241,11 +275,15 @@ export class TransactionService {
    * cap then every window it declares, in the fixed order
    * Per-Txn → Daily Calendar → Daily Rolling → Monthly. Stops on the first
    * breach and compensates everything applied so far, in reverse order.
+   * STORY-08-01 AC4 / STORY-08-03 — `direction` selects which direction's
+   * registry and definitions this evaluates against; a client with no
+   * registry configured for this direction fails closed exactly like a
+   * client with no registry at all did before EPIC-08.
    */
-  async #runWaterfall(clientId, { transactionId, amount, attributes }, timezone, now) {
-    const registry = this.configCache.getRegistry(clientId);
+  async #runWaterfall(clientId, { direction, transactionId, amount, attributes }, timezone, now) {
+    const registry = this.configCache.getRegistry(clientId, direction);
     if (!registry) {
-      return { status: TRANSACTION_STATUS.REJECTED, rejection: { reason: 'REGISTRY_MISSING', message: `Client '${clientId}' has no registry; failing closed.` } };
+      return { status: TRANSACTION_STATUS.REJECTED, rejection: { reason: 'REGISTRY_MISSING', message: `Client '${clientId}' has no registry for direction '${direction}'; failing closed.` } };
     }
 
     const appliedKeys = [];
@@ -257,7 +295,7 @@ export class TransactionService {
         continue; // BRD §2.4 step 3.1 — required attribute absent, dimension not applicable.
       }
 
-      const perTxnResult = this.counterEngineService.checkPerTransaction(clientId, { dimensionCode: dimension.code, attributeMap, txnAmount: amount, now });
+      const perTxnResult = this.counterEngineService.checkPerTransaction(clientId, { direction, dimensionCode: dimension.code, attributeMap, txnAmount: amount, now });
       if (!perTxnResult.passed) {
         await this.#compensateAll(clientId, appliedKeys, transactionId);
         const rejection = {
@@ -287,14 +325,14 @@ export class TransactionService {
         const warming = deriveWindowState(windowEntry, now) === WINDOW_STATE.WARMING;
         anyWarming = anyWarming || warming;
 
-        const definitions = this.configCache.getDefinitions(clientId) ?? [];
-        const definition = findApplicableDefinition(definitions, dimension.code, windowType, attributeMap, now);
+        const definitions = this.configCache.getDefinitions(clientId, direction) ?? [];
+        const definition = findApplicableDefinition(definitions, direction, dimension.code, windowType, attributeMap, now);
         if (!definition) {
           continue; // Undeclared threshold = Unlimited (§2.3)
         }
 
         // eslint-disable-next-line no-await-in-loop
-        const result = await this.#checkAndIncrement({ clientId, dimension, windowType, windowEntry, orderedValues, timezone, amount, definition, now });
+        const result = await this.#checkAndIncrement({ clientId, direction, dimension, windowType, windowEntry, orderedValues, timezone, amount, definition, now });
 
         if (!result.passed) {
           // eslint-disable-next-line no-await-in-loop
@@ -332,6 +370,7 @@ export class TransactionService {
 
     return {
       status: TRANSACTION_STATUS.APPROVED,
+      direction,
       appliedCounterKeys: appliedKeys,
       windowState: anyWarming ? WINDOW_STATE.WARMING : undefined,
     };
@@ -344,7 +383,7 @@ export class TransactionService {
     return dimension.hot ? 'tier2' : 'tier1';
   }
 
-  async #checkAndIncrement({ clientId, dimension, windowType, windowEntry, orderedValues, timezone, amount, definition, now }) {
+  async #checkAndIncrement({ clientId, direction, dimension, windowType, windowEntry, orderedValues, timezone, amount, definition, now }) {
     const common = { thresholdAmount: definition.thresholdAmount, thresholdCount: definition.thresholdCount, txnAmount: amount, now };
     const tier = this.#tierFor(dimension, windowType);
     const startedAt = this.metricsService ? process.hrtime.bigint() : null;
@@ -353,12 +392,12 @@ export class TransactionService {
     if (windowType === WINDOW_TYPE.DAILY_ROLLING) {
       const granularity = windowEntry.granularity;
       result = dimension.hot
-        ? await this.counterEngineService.checkAndIncrementRollingSharded(clientId, { dimensionCode: dimension.code, attributeValues: orderedValues, windowEntry, granularity, ...common })
-        : await this.counterEngineService.checkAndIncrementRolling(clientId, { dimensionCode: dimension.code, attributeValues: orderedValues, granularity, ...common });
+        ? await this.counterEngineService.checkAndIncrementRollingSharded(clientId, { direction, dimensionCode: dimension.code, attributeValues: orderedValues, windowEntry, granularity, ...common })
+        : await this.counterEngineService.checkAndIncrementRolling(clientId, { direction, dimensionCode: dimension.code, attributeValues: orderedValues, granularity, ...common });
     } else if (dimension.hot) {
-      result = await this.counterEngineService.checkAndIncrementTier2(clientId, { dimensionCode: dimension.code, windowType, attributeValues: orderedValues, timezone, windowEntry, ...common });
+      result = await this.counterEngineService.checkAndIncrementTier2(clientId, { direction, dimensionCode: dimension.code, windowType, attributeValues: orderedValues, timezone, windowEntry, ...common });
     } else {
-      result = await this.counterEngineService.checkAndIncrementTier1(clientId, { dimensionCode: dimension.code, windowType, attributeValues: orderedValues, timezone, ...common });
+      result = await this.counterEngineService.checkAndIncrementTier1(clientId, { direction, dimensionCode: dimension.code, windowType, attributeValues: orderedValues, timezone, ...common });
     }
 
     if (startedAt !== null) {

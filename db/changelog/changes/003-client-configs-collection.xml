@@ -15,10 +15,14 @@
         one document per tenant, so there is no "other tenant" a query
         against this collection could leak into.
 
-        Direction-scoping (`directions` map, BRD §4.3/§2.1.5) is deliberately
-        NOT in this schema yet — it lands with EPIC-08, alongside the
-        counter engine, per docs/00-INDEX.md's suggested delivery sequence.
-        `allowedDimensions` here is the pre-direction, OUTWARD-implicit shape.
+        STORY-08-03 — `directions` (a map keyed by OUTWARD/INWARD, each an
+        object carrying that direction's own `allowedDimensions`) is now the
+        stored shape. `allowedDimensions` remains listed as an optional
+        top-level property purely for backward-compatible documentation: a
+        legacy pre-EPIC-08 document (top-level `allowedDimensions`, no
+        `directions`) is normalized to the new shape at READ time
+        (`normalizeRegistryDoc`, registry.model.js) rather than migrated in
+        place, so both shapes can coexist in this collection.
     -->
     <changeSet id="001-create-client-configs-collection" author="imps-velocity">
         <mongodb:createCollection collectionName="clientConfigs">
@@ -27,13 +31,14 @@
                   "validator": {
                     "$jsonSchema": {
                       "bsonType": "object",
-                      "required": ["_id", "clientId", "configVersion", "limitsVersion", "allowedDimensions", "createdAt", "updatedAt"],
+                      "required": ["_id", "clientId", "configVersion", "limitsVersion", "createdAt", "updatedAt"],
                       "properties": {
                         "_id": { "bsonType": "string", "description": "clientId" },
                         "clientId": { "bsonType": "string" },
                         "configVersion": { "bsonType": "number", "minimum": 1 },
                         "limitsVersion": { "bsonType": "number", "minimum": 0 },
-                        "allowedDimensions": { "bsonType": "array" },
+                        "directions": { "bsonType": ["object", "null"], "description": "keyed by OUTWARD/INWARD, each {allowedDimensions: array}" },
+                        "allowedDimensions": { "bsonType": ["array", "null"], "description": "legacy pre-EPIC-08 shape only; normalized at read time" },
                         "createdBy": { "bsonType": "string" },
                         "updatedBy": { "bsonType": "string" },
                         "createdAt": { "bsonType": "date" },

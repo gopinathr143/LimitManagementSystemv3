@@ -24,7 +24,7 @@ describe('Counter TTL cleanup — STORY-03-01 AC3 (integration, real MongoDB rep
 
   test('a counter document whose expireAt has passed is auto-removed with no application code involved', async () => {
     const collection = db.collection(COUNTERS_COLLECTION);
-    const key = 'limit:CLIENT_TTL:UCIC:DAILY_CALENDAR:U1:2020-01-01';
+    const key = 'limit:CLIENT_TTL:OUTWARD:UCIC:DAILY_CALENDAR:U1:2020-01-01';
     const now = new Date();
     // expireAt already in the past — eligible for the very next TTL sweep.
     await collection.insertOne({ _id: key, ...buildBootstrapDocument({ clientId: 'CLIENT_TTL', now, expireAt: new Date(now.getTime() - 1000) }) });

@@ -3,7 +3,7 @@
 | Field | Value |
 | :--- | :--- |
 | **Epic** | [EPIC-08 — Direction Scoping and INWARD Readiness](../epics/EPIC-08-direction-scoping-and-inward-readiness.md) |
-| **Status** | `Not Started` |
+| **Status** | `Blocked` |
 | **Priority** | Should |
 | **Estimate (pts)** | 5 |
 | **BRD reference** | Section 2.1.7, 4.2 |
@@ -51,3 +51,11 @@ A story is **Done** only when every row below has recorded evidence. A ticked De
 ## Notes / Risks
 
 Confirm with the risk function whether any combined control is actually required before building this. It is genuinely useful for mule-account throughput detection but adds a counter that is hot from both directions at once.
+
+**Deliberately not built in this session — a written, accepted decision, not an oversight.** This story's own text (above) makes building it conditional on a confirmation from the risk function that does not exist in this session. Rather than guess at a scope that has real production consequences (a counter hot from both directions simultaneously, at whatever combined rate that implies for sharding), the decision made here is to:
+
+- Reserve the wire format only: `COMBINED_DIRECTION_SEGMENT = 'ALL'` is defined in `src/constants/index.js` as the direction-segment value a combined counter key would use, so a future implementation slots into the existing key format (`limit:{clientId}:{direction|ALL}:{dimensionCode}:...`) without a migration.
+- Build nothing else — no registry validation for symmetric combined declarations (AC3), no shared-counter increment/decrement path (AC1/AC2), no combined shard sizing (AC4/AC5).
+- Leave UAT 47 and UAT 48 recorded as `NOT YET IMPLEMENTED` in `Docs/UAT-EXECUTION-PACK.md` rather than fabricating a pass.
+
+This keeps the epic's other five stories shippable on schedule (STORY-08-01/02/03/05/06 are all `Must` priority and have no dependency on this `Should`-priority story) while leaving the door open. Per `00-INDEX.md`'s open items table, "whether any combined total-throughput control is required" remains an open item owned by Risk.

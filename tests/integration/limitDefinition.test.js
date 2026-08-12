@@ -10,7 +10,7 @@ const VALID_DIMENSIONS = [
 
 async function registerClientWithWarmedRegistry(app) {
   const { clientId } = await createTestClient(app);
-  await request(app).put(`/clients/${clientId}/dimensions`).send({ allowedDimensions: VALID_DIMENSIONS });
+  await request(app).put(`/clients/${clientId}/dimensions`).send({ direction: 'OUTWARD', allowedDimensions: VALID_DIMENSIONS });
   return { clientId };
 }
 
@@ -36,7 +36,7 @@ describe('Limit definitions — STORY-02-04/02-05 (integration, real MongoDB rep
     const { clientId } = await registerClientWithWarmedRegistry(app);
     const res = await request(app)
       .post(`/clients/${clientId}/limits`)
-      .send({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 10000000 });
+      .send({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 10000000 });
 
     assert.equal(res.status, 201);
     assert.equal(res.body.data.effective, true);
@@ -47,7 +47,7 @@ describe('Limit definitions — STORY-02-04/02-05 (integration, real MongoDB rep
     const { clientId } = await registerClientWithWarmedRegistry(app);
     const res = await request(app)
       .post(`/clients/${clientId}/limits`)
-      .send({ dimensionCode: 'NOT_REGISTERED', windowType: 'PER_TXN', thresholdAmount: 100 });
+      .send({ direction: 'OUTWARD', dimensionCode: 'NOT_REGISTERED', windowType: 'PER_TXN', thresholdAmount: 100 });
 
     assert.equal(res.status, 201, 'the write still succeeds');
     assert.equal(res.body.data.effective, false);
@@ -58,7 +58,7 @@ describe('Limit definitions — STORY-02-04/02-05 (integration, real MongoDB rep
     const { clientId } = await registerClientWithWarmedRegistry(app);
     const res = await request(app)
       .post(`/clients/${clientId}/limits`)
-      .send({ dimensionCode: 'GLOBAL', windowType: 'MONTHLY', thresholdAmount: 100 });
+      .send({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'MONTHLY', thresholdAmount: 100 });
 
     assert.equal(res.status, 201);
     assert.equal(res.body.data.effective, false);
@@ -71,12 +71,12 @@ describe('Limit definitions — STORY-02-04/02-05 (integration, real MongoDB rep
     // No registry yet at all — the definition is inert for the strongest possible reason.
     const createRes = await request(app)
       .post(`/clients/${clientId}/limits`)
-      .send({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 100 });
+      .send({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 100 });
     assert.equal(createRes.body.data.effective, false);
 
     await request(app)
       .put(`/clients/${clientId}/dimensions`)
-      .send({ allowedDimensions: [{ code: 'GLOBAL', attributes: [], windows: ['DAILY_CALENDAR'] }] });
+      .send({ direction: 'OUTWARD', allowedDimensions: [{ code: 'GLOBAL', attributes: [], windows: ['DAILY_CALENDAR'] }] });
 
     const getRes = await request(app).get(`/clients/${clientId}/limits/${createRes.body.data._id}`);
     assert.equal(getRes.body.data.effective, true, 'PER_TXN only needs the dimension registered, which just happened');
@@ -84,8 +84,8 @@ describe('Limit definitions — STORY-02-04/02-05 (integration, real MongoDB rep
 
   test('STORY-02-05 AC3: list responses carry an effective flag per definition', async () => {
     const { clientId } = await registerClientWithWarmedRegistry(app);
-    await request(app).post(`/clients/${clientId}/limits`).send({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 1 });
-    await request(app).post(`/clients/${clientId}/limits`).send({ dimensionCode: 'GLOBAL', windowType: 'MONTHLY', thresholdAmount: 1 });
+    await request(app).post(`/clients/${clientId}/limits`).send({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 1 });
+    await request(app).post(`/clients/${clientId}/limits`).send({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'MONTHLY', thresholdAmount: 1 });
 
     const listRes = await request(app).get(`/clients/${clientId}/limits`);
     const effectiveFlags = listRes.body.data.map((d) => d.effective).sort();
@@ -96,10 +96,10 @@ describe('Limit definitions — STORY-02-04/02-05 (integration, real MongoDB rep
     const { clientId } = await registerClientWithWarmedRegistry(app);
     await request(app)
       .post(`/clients/${clientId}/limits`)
-      .send({ dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 100000 });
+      .send({ direction: 'OUTWARD', dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 100000 });
     await request(app)
       .post(`/clients/${clientId}/limits`)
-      .send({ dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 999999, scope: { ucic: 'U12345' } });
+      .send({ direction: 'OUTWARD', dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 999999, scope: { ucic: 'U12345' } });
 
     const listRes = await request(app).get(`/clients/${clientId}/limits?dimensionCode=UCIC`);
     assert.equal(listRes.body.data.length, 2);
@@ -113,7 +113,7 @@ describe('Limit definitions — STORY-02-04/02-05 (integration, real MongoDB rep
     const { clientId } = await registerClientWithWarmedRegistry(app);
     const createRes = await request(app)
       .post(`/clients/${clientId}/limits`)
-      .send({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 1000 });
+      .send({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 1000 });
 
     const updateRes = await request(app)
       .put(`/clients/${clientId}/limits/${createRes.body.data._id}`)
@@ -135,7 +135,7 @@ describe('Limit definitions — STORY-02-04/02-05 (integration, real MongoDB rep
     const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const res = await request(app)
       .post(`/clients/${clientId}/limits`)
-      .send({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 1000, effectiveFrom: future });
+      .send({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 1000, effectiveFrom: future });
 
     assert.equal(res.body.data.effective, false);
     assert.equal(res.body.warnings[0].code, 'NOT_YET_EFFECTIVE_DATE');
@@ -145,7 +145,7 @@ describe('Limit definitions — STORY-02-04/02-05 (integration, real MongoDB rep
     const { clientId } = await registerClientWithWarmedRegistry(app);
     const createRes = await request(app)
       .post(`/clients/${clientId}/limits`)
-      .send({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 1000 });
+      .send({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 1000 });
 
     const deleteRes = await request(app).delete(`/clients/${clientId}/limits/${createRes.body.data._id}`);
     assert.equal(deleteRes.status, 200);
@@ -161,10 +161,10 @@ describe('Limit definitions — STORY-02-04/02-05 (integration, real MongoDB rep
     const clientB = await registerClientWithWarmedRegistry(app);
     await request(app)
       .post(`/clients/${clientA.clientId}/limits`)
-      .send({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 1000 });
+      .send({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 1000 });
     await request(app)
       .post(`/clients/${clientB.clientId}/limits`)
-      .send({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 2000 });
+      .send({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 2000 });
 
     const aList = await request(app).get(`/clients/${clientA.clientId}/limits`);
     const bList = await request(app).get(`/clients/${clientB.clientId}/limits`);
@@ -183,12 +183,12 @@ describe('Limit definitions — STORY-02-04/02-05 (integration, real MongoDB rep
     const { clientId } = await registerClientWithWarmedRegistry(app);
     const floatRes = await request(app)
       .post(`/clients/${clientId}/limits`)
-      .send({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 10.5 });
+      .send({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 10.5 });
     assert.equal(floatRes.status, 400);
 
     const emptyRes = await request(app)
       .post(`/clients/${clientId}/limits`)
-      .send({ dimensionCode: 'GLOBAL', windowType: 'DAILY_CALENDAR' });
+      .send({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'DAILY_CALENDAR' });
     assert.equal(emptyRes.status, 400);
   });
 });

@@ -43,12 +43,20 @@ describe('resolveClientId — no authentication, clientId taken directly from th
     assert.equal(req.tenant, undefined);
   });
 
-  test('an ACTIVE client resolves req.tenant and proceeds', async () => {
-    const clients = [{ clientId: 'CLIENT_A', status: 'ACTIVE', timezone: 'Asia/Kolkata' }];
+  test('an ACTIVE client resolves req.tenant (including enabledDirections) and proceeds', async () => {
+    const clients = [{ clientId: 'CLIENT_A', status: 'ACTIVE', timezone: 'Asia/Kolkata', enabledDirections: ['OUTWARD'] }];
     const req = mockReq({ params: { clientId: 'CLIENT_A' } });
     const next = mockNext();
     await createResolveClientId(fakeClientServiceFor(clients))(req, {}, next);
     assert.equal(next.calls[0], undefined);
-    assert.deepEqual(req.tenant, { clientId: 'CLIENT_A', timezone: 'Asia/Kolkata' });
+    assert.deepEqual(req.tenant, { clientId: 'CLIENT_A', timezone: 'Asia/Kolkata', enabledDirections: ['OUTWARD'] });
+  });
+
+  test('a client with no enabledDirections field defaults to an empty array, not undefined (fail-closed for direction checks downstream)', async () => {
+    const clients = [{ clientId: 'CLIENT_B', status: 'ACTIVE', timezone: 'UTC' }];
+    const req = mockReq({ params: { clientId: 'CLIENT_B' } });
+    const next = mockNext();
+    await createResolveClientId(fakeClientServiceFor(clients))(req, {}, next);
+    assert.deepEqual(req.tenant.enabledDirections, []);
   });
 });

@@ -18,13 +18,13 @@ const TZ = 'UTC';
 async function seedRegistry(db, clientId, dimensions) {
   const now = new Date();
   const normalized = validateAndNormalizeRegistry(dimensions, { previousRegistry: null, timezone: TZ, now });
-  const doc = buildRegistryDocument({ clientId, allowedDimensions: normalized, configVersion: 1, limitsVersion: 1, actor: 'test', now });
+  const doc = buildRegistryDocument({ clientId, directions: { OUTWARD: { allowedDimensions: normalized } }, configVersion: 1, limitsVersion: 1, actor: 'test', now });
   await db.collection(CLIENT_CONFIGS_COLLECTION).insertOne(doc);
 }
 
 async function seedLimit(db, clientId, { dimensionCode, windowType, thresholdAmount, thresholdCount, scope }) {
   const now = new Date();
-  const normalized = validateLimitDefinitionCreate({ dimensionCode, windowType, thresholdAmount, thresholdCount, scope });
+  const normalized = validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode, windowType, thresholdAmount, thresholdCount, scope });
   const doc = buildLimitDefinitionDocument({ clientId, normalized, actor: 'test', now });
   await db.collection(LIMITS_COLLECTION).insertOne({ ...doc, clientId });
 }
@@ -81,7 +81,7 @@ describe('Config-driven validation waterfall + compensating saga — STORY-04-03
     await harness.configCache.warm([clientId]);
 
     // No `ucic` in the payload — UCIC must be skipped, not error, and its (tiny) threshold must never be checked.
-    const res = await harness.transactionService.submit(clientId, { transactionId: 'T1', amount: 5000 }, TZ);
+    const res = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'T1', amount: 5000  }, TZ, ['OUTWARD']);
     assert.equal(res.body.data.status, 'APPROVED');
     assert.ok(res.body.data.appliedCounterKeys.every((k) => k.dimensionCode === 'GLOBAL'));
   });
@@ -98,7 +98,7 @@ describe('Config-driven validation waterfall + compensating saga — STORY-04-03
     await seedLimit(db, clientId, { dimensionCode: 'UCIC', windowType: 'MONTHLY', thresholdAmount: 100 }); // tight — breaches
     await harness.configCache.warm([clientId]);
 
-    const res = await harness.transactionService.submit(clientId, { transactionId: 'T2', amount: 150, ucic: 'U1' }, TZ);
+    const res = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'T2', amount: 150, ucic: 'U1'  }, TZ, ['OUTWARD']);
     assert.equal(res.body.data.status, 'REJECTED');
     assert.equal(res.body.data.rejection.dimensionCode, 'UCIC');
     assert.equal(res.body.data.rejection.windowType, 'MONTHLY');
@@ -119,7 +119,7 @@ describe('Config-driven validation waterfall + compensating saga — STORY-04-03
     await seedLimit(db, clientId, { dimensionCode: 'UCIC', windowType: 'MONTHLY', thresholdAmount: 1000000 });
     await harness.configCache.warm([clientId]);
 
-    const res = await harness.transactionService.submit(clientId, { transactionId: 'T3', amount: 250, ucic: 'U1' }, TZ);
+    const res = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'T3', amount: 250, ucic: 'U1'  }, TZ, ['OUTWARD']);
     assert.equal(res.body.data.status, 'APPROVED');
     const byDimension = Object.fromEntries(res.body.data.appliedCounterKeys.map((k) => [`${k.dimensionCode}:${k.windowType}`, k]));
     assert.ok(byDimension['GLOBAL:DAILY_CALENDAR']);
@@ -137,7 +137,7 @@ describe('Config-driven validation waterfall + compensating saga — STORY-04-03
     await seedLimit(db, clientId, { dimensionCode: 'UCIC_CHANNEL', windowType: 'DAILY_CALENDAR', thresholdAmount: 50 });
     await harness.configCache.warm([clientId]);
 
-    const res = await harness.transactionService.submit(clientId, { transactionId: 'T4', amount: 60, ucic: 'U1', channel: 'MOBILE' }, TZ);
+    const res = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'T4', amount: 60, ucic: 'U1', channel: 'MOBILE'  }, TZ, ['OUTWARD']);
     assert.equal(res.body.data.status, 'REJECTED');
     assert.equal(res.body.data.rejection.dimensionCode, 'UCIC_CHANNEL');
   });
@@ -153,9 +153,9 @@ describe('Config-driven validation waterfall + compensating saga — STORY-04-03
     await seedLimit(db, clientId, { dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 1000000, thresholdCount: 1 });
     await harness.configCache.warm([clientId]);
 
-    const first = await harness.transactionService.submit(clientId, { transactionId: 'T5A', amount: 10, ucic: 'U_COUNT' }, TZ);
+    const first = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'T5A', amount: 10, ucic: 'U_COUNT'  }, TZ, ['OUTWARD']);
     assert.equal(first.body.data.status, 'APPROVED');
-    const second = await harness.transactionService.submit(clientId, { transactionId: 'T5B', amount: 10, ucic: 'U_COUNT' }, TZ);
+    const second = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'T5B', amount: 10, ucic: 'U_COUNT'  }, TZ, ['OUTWARD']);
     assert.equal(second.body.data.status, 'REJECTED');
     assert.deepEqual(second.body.data.rejection.metrics, ['COUNT']);
   });
@@ -171,11 +171,11 @@ describe('Config-driven validation waterfall + compensating saga — STORY-04-03
     await seedLimit(db, clientId, { dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 1000000 });
     await harness.configCache.warm([clientId]);
 
-    const res = await harness.transactionService.submit(clientId, { transactionId: 'T6', amount: 100, ucic: 'U1' }, TZ);
+    const res = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'T6', amount: 100, ucic: 'U1'  }, TZ, ['OUTWARD']);
     assert.equal(res.body.data.status, 'REJECTED');
     assert.equal(res.body.data.rejection.dimensionCode, 'GLOBAL');
 
-    const ucicCounters = await db.collection(COUNTERS_COLLECTION).find({ clientId, _id: { $regex: '^limit:CLIENT_WF_F:UCIC:' } }).toArray();
+    const ucicCounters = await db.collection(COUNTERS_COLLECTION).find({ clientId, _id: { $regex: '^limit:CLIENT_WF_F:OUTWARD:UCIC:' } }).toArray();
     assert.equal(ucicCounters.length, 0, 'UCIC must never have been touched once GLOBAL had already breached');
   });
 });

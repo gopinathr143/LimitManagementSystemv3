@@ -25,17 +25,17 @@ async function seedClientConfig(db, clientId, { perTxnThreshold = 1000000000, da
     [{ code: 'GLOBAL', attributes: [], hot: true, shardFactor: 4, windows: { DAILY_CALENDAR: { warming: true } } }],
     { previousRegistry: null, timezone: TZ, now },
   );
-  const registryDoc = buildRegistryDocument({ clientId, allowedDimensions: dims, configVersion: 1, limitsVersion: 1, actor: 'test', now });
+  const registryDoc = buildRegistryDocument({ clientId, directions: { OUTWARD: { allowedDimensions: dims } }, configVersion: 1, limitsVersion: 1, actor: 'test', now });
   await db.collection(CLIENT_CONFIGS_COLLECTION).insertOne(registryDoc);
 
   // GLOBAL's mandatory Per-Transaction cap (Tier 0, stateless).
-  const perTxnNormalized = validateLimitDefinitionCreate({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: perTxnThreshold });
+  const perTxnNormalized = validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: perTxnThreshold });
   const perTxnDoc = buildLimitDefinitionDocument({ clientId, normalized: perTxnNormalized, actor: 'test', now });
   await db.collection(LIMITS_COLLECTION).insertOne({ ...perTxnDoc, clientId });
 
   // GLOBAL's DAILY_CALENDAR cap (Tier 2, since GLOBAL is declared hot) — without this, the declared
   // window has no limit definition and is "Undefined = Unlimited": no counter is written at all.
-  const dailyNormalized = validateLimitDefinitionCreate({ dimensionCode: 'GLOBAL', windowType: 'DAILY_CALENDAR', thresholdAmount: dailyThreshold });
+  const dailyNormalized = validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'DAILY_CALENDAR', thresholdAmount: dailyThreshold });
   const dailyDoc = buildLimitDefinitionDocument({ clientId, normalized: dailyNormalized, actor: 'test', now: new Date(now.getTime() + 1) });
   await db.collection(LIMITS_COLLECTION).insertOne({ ...dailyDoc, clientId });
 }
@@ -78,7 +78,7 @@ describe('TransactionService idempotency mutex — STORY-04-01 (integration, rea
 
     const CONCURRENT = 25;
     const results = await Promise.all(
-      Array.from({ length: CONCURRENT }, () => transactionService.submit('CLIENT_IDEM_A', { transactionId: 'TXN-1', amount: 500 }, TZ)),
+      Array.from({ length: CONCURRENT }, () => transactionService.submit('CLIENT_IDEM_A', { direction: 'OUTWARD', transactionId: 'TXN-1', amount: 500 }, TZ, ['OUTWARD'])),
     );
 
     // Every response must be either a 200 carrying the (shared) APPROVED decision — whether this
@@ -99,7 +99,7 @@ describe('TransactionService idempotency mutex — STORY-04-01 (integration, rea
     assert.equal(totalAmount, 500, 'the counter must reflect exactly one transaction, not one per concurrent request');
     assert.equal(totalCount, 1);
 
-    const storedTxn = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId: 'CLIENT_IDEM_A', transactionId: 'TXN-1' } });
+    const storedTxn = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId: 'CLIENT_IDEM_A', direction: 'OUTWARD', transactionId: 'TXN-1' } });
     assert.equal(storedTxn.status, 'APPROVED');
   });
 
@@ -107,10 +107,10 @@ describe('TransactionService idempotency mutex — STORY-04-01 (integration, rea
     await seedClientConfig(db, 'CLIENT_IDEM_B');
     await configCache.warm(['CLIENT_IDEM_B']);
 
-    const first = await transactionService.submit('CLIENT_IDEM_B', { transactionId: 'TXN-2', amount: 700 }, TZ);
+    const first = await transactionService.submit('CLIENT_IDEM_B', { direction: 'OUTWARD', transactionId: 'TXN-2', amount: 700 }, TZ, ['OUTWARD']);
     assert.equal(first.body.data.status, 'APPROVED');
 
-    const second = await transactionService.submit('CLIENT_IDEM_B', { transactionId: 'TXN-2', amount: 700 }, TZ);
+    const second = await transactionService.submit('CLIENT_IDEM_B', { direction: 'OUTWARD', transactionId: 'TXN-2', amount: 700 }, TZ, ['OUTWARD']);
     assert.equal(second.httpStatus, 200);
     assert.equal(second.body.data.status, 'APPROVED');
 
@@ -125,8 +125,9 @@ describe('TransactionService idempotency mutex — STORY-04-01 (integration, rea
 
     // Manually seed a PENDING claim to simulate a genuinely in-flight peer request.
     await db.collection(TRANSACTIONS_COLLECTION).insertOne({
-      _id: { clientId: 'CLIENT_IDEM_C', transactionId: 'TXN-3' },
+      _id: { clientId: 'CLIENT_IDEM_C', direction: 'OUTWARD', transactionId: 'TXN-3' },
       clientId: 'CLIENT_IDEM_C',
+      direction: 'OUTWARD',
       transactionId: 'TXN-3',
       status: 'PENDING',
       requestData: { amount: 100 },
@@ -135,7 +136,7 @@ describe('TransactionService idempotency mutex — STORY-04-01 (integration, rea
       instanceId: 'other-instance',
     });
 
-    const res = await transactionService.submit('CLIENT_IDEM_C', { transactionId: 'TXN-3', amount: 100 }, TZ);
+    const res = await transactionService.submit('CLIENT_IDEM_C', { direction: 'OUTWARD', transactionId: 'TXN-3', amount: 100 }, TZ, ['OUTWARD']);
     assert.equal(res.httpStatus, 409);
 
     const counters = await db.collection(COUNTERS_COLLECTION).find({ clientId: 'CLIENT_IDEM_C' }).toArray();
@@ -148,15 +149,15 @@ describe('TransactionService idempotency mutex — STORY-04-01 (integration, rea
     await configCache.warm(['CLIENT_IDEM_D1', 'CLIENT_IDEM_D2']);
 
     const [r1, r2] = await Promise.all([
-      transactionService.submit('CLIENT_IDEM_D1', { transactionId: 'SHARED-TXN', amount: 111 }, TZ),
-      transactionService.submit('CLIENT_IDEM_D2', { transactionId: 'SHARED-TXN', amount: 222 }, TZ),
+      transactionService.submit('CLIENT_IDEM_D1', { direction: 'OUTWARD', transactionId: 'SHARED-TXN', amount: 111 }, TZ, ['OUTWARD']),
+      transactionService.submit('CLIENT_IDEM_D2', { direction: 'OUTWARD', transactionId: 'SHARED-TXN', amount: 222 }, TZ, ['OUTWARD']),
     ]);
 
     assert.equal(r1.body.data.status, 'APPROVED');
     assert.equal(r2.body.data.status, 'APPROVED');
 
-    const doc1 = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId: 'CLIENT_IDEM_D1', transactionId: 'SHARED-TXN' } });
-    const doc2 = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId: 'CLIENT_IDEM_D2', transactionId: 'SHARED-TXN' } });
+    const doc1 = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId: 'CLIENT_IDEM_D1', direction: 'OUTWARD', transactionId: 'SHARED-TXN' } });
+    const doc2 = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId: 'CLIENT_IDEM_D2', direction: 'OUTWARD', transactionId: 'SHARED-TXN' } });
     assert.equal(doc1.requestData.amount, 111);
     assert.equal(doc2.requestData.amount, 222);
 
@@ -170,8 +171,8 @@ describe('TransactionService idempotency mutex — STORY-04-01 (integration, rea
     await seedClientConfig(db, 'CLIENT_IDEM_E');
     await configCache.warm(['CLIENT_IDEM_E']);
 
-    await transactionService.submit('CLIENT_IDEM_E', { transactionId: 'TXN-5', amount: 42 }, TZ);
-    const doc = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId: 'CLIENT_IDEM_E', transactionId: 'TXN-5' } });
+    await transactionService.submit('CLIENT_IDEM_E', { direction: 'OUTWARD', transactionId: 'TXN-5', amount: 42 }, TZ, ['OUTWARD']);
+    const doc = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId: 'CLIENT_IDEM_E', direction: 'OUTWARD', transactionId: 'TXN-5' } });
     assert.equal(doc.status, 'APPROVED');
     assert.ok(Array.isArray(doc.appliedCounterKeys) && doc.appliedCounterKeys.length > 0);
     assert.ok(doc.resolvedAt);

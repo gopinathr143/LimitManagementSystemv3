@@ -42,7 +42,7 @@ describe('Dimension registry — STORY-02-01/02/03 (integration, real MongoDB re
     const { clientId } = await createTestClient(app);
     const res = await request(app)
       .put(`/clients/${clientId}/dimensions`)
-      .send({ allowedDimensions: [{ code: 'UCIC', attributes: ['ucic'], windows: ['DAILY_CALENDAR'] }] });
+      .send({ direction: 'OUTWARD', allowedDimensions: [{ code: 'UCIC', attributes: ['ucic'], windows: ['DAILY_CALENDAR'] }] });
 
     assert.equal(res.status, 400);
     assert.ok(res.body.error.details.errors.some((e) => /GLOBAL/.test(e.message)));
@@ -56,6 +56,7 @@ describe('Dimension registry — STORY-02-01/02/03 (integration, real MongoDB re
     const res = await request(app)
       .put(`/clients/${clientId}/dimensions`)
       .send({
+        direction: 'OUTWARD',
         allowedDimensions: [
           { code: 'GLOBAL', attributes: [], hot: true, shardFactor: 32, windows: ['DAILY_CALENDAR'] },
           { code: 'BAD', attributes: ['notReal'], windows: ['DAILY_CALENDAR'] },
@@ -67,22 +68,22 @@ describe('Dimension registry — STORY-02-01/02/03 (integration, real MongoDB re
 
   test('AC4: a valid PUT persists and GET reflects it with derived window state', async () => {
     const { clientId } = await createTestClient(app);
-    const putRes = await request(app).put(`/clients/${clientId}/dimensions`).send({ allowedDimensions: VALID_DIMENSIONS });
+    const putRes = await request(app).put(`/clients/${clientId}/dimensions`).send({ direction: 'OUTWARD', allowedDimensions: VALID_DIMENSIONS });
     assert.equal(putRes.status, 200);
     assert.equal(putRes.body.data.configVersion, 1);
 
     const getRes = await request(app).get(`/clients/${clientId}/dimensions`);
     assert.equal(getRes.status, 200);
-    assert.equal(getRes.body.data.allowedDimensions[0].windows.DAILY_CALENDAR.state, 'PENDING_ACTIVATION');
+    assert.equal(getRes.body.data.directions.OUTWARD.allowedDimensions[0].windows.DAILY_CALENDAR.state, 'PENDING_ACTIVATION');
   });
 
   test('AC2 (again, on second version): an invalid update after a valid one leaves the valid snapshot in force', async () => {
     const { clientId } = await createTestClient(app);
-    await request(app).put(`/clients/${clientId}/dimensions`).send({ allowedDimensions: VALID_DIMENSIONS });
+    await request(app).put(`/clients/${clientId}/dimensions`).send({ direction: 'OUTWARD', allowedDimensions: VALID_DIMENSIONS });
 
     const badRes = await request(app)
       .put(`/clients/${clientId}/dimensions`)
-      .send({ allowedDimensions: [{ code: 'UCIC', attributes: ['ucic'], windows: ['DAILY_CALENDAR'] }] });
+      .send({ direction: 'OUTWARD', allowedDimensions: [{ code: 'UCIC', attributes: ['ucic'], windows: ['DAILY_CALENDAR'] }] });
     assert.equal(badRes.status, 400);
 
     const getRes = await request(app).get(`/clients/${clientId}/dimensions`);
@@ -93,19 +94,19 @@ describe('Dimension registry — STORY-02-01/02/03 (integration, real MongoDB re
     const clientA = await createTestClient(app);
     const clientB = await createTestClient(app);
 
-    await request(app).put(`/clients/${clientA.clientId}/dimensions`).send({ allowedDimensions: VALID_DIMENSIONS });
+    await request(app).put(`/clients/${clientA.clientId}/dimensions`).send({ direction: 'OUTWARD', allowedDimensions: VALID_DIMENSIONS });
     await request(app)
       .put(`/clients/${clientB.clientId}/dimensions`)
-      .send({ allowedDimensions: [{ code: 'GLOBAL', attributes: [], windows: ['MONTHLY'] }] });
+      .send({ direction: 'OUTWARD', allowedDimensions: [{ code: 'GLOBAL', attributes: [], windows: ['MONTHLY'] }] });
 
     const aView = await request(app).get(`/clients/${clientA.clientId}/dimensions`);
     const bView = await request(app).get(`/clients/${clientB.clientId}/dimensions`);
 
-    assert.equal(aView.body.data.allowedDimensions.length, 2);
-    assert.equal(bView.body.data.allowedDimensions.length, 1);
+    assert.equal(aView.body.data.directions.OUTWARD.allowedDimensions.length, 2);
+    assert.equal(bView.body.data.directions.OUTWARD.allowedDimensions.length, 1);
 
     // Changing A does not affect B.
-    await request(app).put(`/clients/${clientA.clientId}/dimensions`).send({ allowedDimensions: VALID_DIMENSIONS });
+    await request(app).put(`/clients/${clientA.clientId}/dimensions`).send({ direction: 'OUTWARD', allowedDimensions: VALID_DIMENSIONS });
     const bViewAgain = await request(app).get(`/clients/${clientB.clientId}/dimensions`);
     assert.equal(bViewAgain.body.data.configVersion, 1);
   });

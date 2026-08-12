@@ -1,7 +1,7 @@
 import { AppError } from '../utils/AppError.js';
 import { scopeEquals } from '../utils/deepEqual.js';
 import { findDimension, isWindowEnforced } from './registry.model.js';
-import { ALL_LIMIT_WINDOW_TYPES, PER_TXN_WINDOW_TYPE, CURRENCY, REGISTRY_DIMENSION_CODE_PATTERN } from '../constants/index.js';
+import { ALL_LIMIT_WINDOW_TYPES, PER_TXN_WINDOW_TYPE, CURRENCY, REGISTRY_DIMENSION_CODE_PATTERN, ALL_DIRECTIONS } from '../constants/index.js';
 
 export const LIMITS_COLLECTION = 'limits';
 
@@ -30,9 +30,13 @@ function validateScope(scope, errors) {
   return normalized;
 }
 
-/** BRD §2.3.2 — money is integers in minor units (paise); no floating point anywhere in the threshold path. */
+/** BRD §2.3.2 — money is integers in minor units (paise); no floating point anywhere in the threshold path. STORY-08-05 AC3 — `direction` is required and, once created, immutable (validateLimitDefinitionUpdate below has no path to change it). */
 export function validateLimitDefinitionCreate(payload) {
   const errors = [];
+
+  if (!ALL_DIRECTIONS.includes(payload?.direction)) {
+    errors.push({ field: 'direction', message: `direction is required and must be one of ${ALL_DIRECTIONS.join(', ')}.` });
+  }
 
   if (typeof payload?.dimensionCode !== 'string' || !REGISTRY_DIMENSION_CODE_PATTERN.test(payload.dimensionCode)) {
     errors.push({ field: 'dimensionCode', message: 'dimensionCode is required and must be 1-64 chars of A-Z, 0-9 or underscore.' });
@@ -84,6 +88,7 @@ export function validateLimitDefinitionCreate(payload) {
   }
 
   return {
+    direction: payload.direction,
     dimensionCode: payload.dimensionCode,
     scope,
     windowType: payload.windowType,
@@ -101,7 +106,7 @@ export function validateLimitDefinitionUpdate(payload) {
   const errors = [];
   const update = {};
 
-  for (const immutableField of ['dimensionCode', 'windowType', 'scope']) {
+  for (const immutableField of ['direction', 'dimensionCode', 'windowType', 'scope']) {
     if (payload?.[immutableField] !== undefined) {
       errors.push({ field: immutableField, message: `${immutableField} is immutable after creation.` });
     }
@@ -179,7 +184,15 @@ export function buildLimitDefinitionDocument({ clientId, normalized, actor, now 
  * are checked first since those are what the story's warning must name
  * specifically ("names the window gate specifically, not just the dimension").
  */
-export function evaluateEffectiveness(definition, registrySnapshot, now = new Date()) {
+export function evaluateEffectiveness(definition, registrySnapshot, now = new Date(), enabledDirections = null) {
+  if (enabledDirections && !enabledDirections.includes(definition.direction)) {
+    return {
+      effective: false,
+      reason: 'DIRECTION_NOT_ENABLED',
+      message: `direction '${definition.direction}' is not yet enabled for this client. The definition is stored and will activate automatically once it is (BRD §4.4).`,
+    };
+  }
+
   const dimension = findDimension(registrySnapshot, definition.dimensionCode);
   if (!dimension) {
     return {
@@ -234,9 +247,10 @@ export function evaluateEffectiveness(definition, registrySnapshot, now = new Da
  * Pure function over an already-loaded definitions list (the in-process
  * cache, STORY-02-06) — no I/O, so it is safe to call on the hot path.
  */
-export function findApplicableDefinition(definitions, dimensionCode, windowType, attributeValues, now = new Date()) {
+export function findApplicableDefinition(definitions, direction, dimensionCode, windowType, attributeValues, now = new Date()) {
   const candidates = definitions.filter(
     (def) =>
+      def.direction === direction &&
       def.dimensionCode === dimensionCode &&
       def.windowType === windowType &&
       def.isActive &&

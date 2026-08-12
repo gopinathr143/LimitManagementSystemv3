@@ -36,7 +36,7 @@ export class ArchivalService {
       // eslint-disable-next-line no-await-in-loop
       await this.transactionArchiveRepository.insertArchived(doc.clientId, doc);
       // eslint-disable-next-line no-await-in-loop
-      const result = await this.transactionRepository.deleteArchived(doc.clientId, doc.transactionId);
+      const result = await this.transactionRepository.deleteArchived(doc.clientId, doc.direction, doc.transactionId);
       if (result.deletedCount === 1) {
         archived += 1;
       }

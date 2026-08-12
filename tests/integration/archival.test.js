@@ -42,8 +42,9 @@ describe('Transaction archival — STORY-06-01 (integration, real MongoDB)', () 
 
   async function seedTerminal(clientId, transactionId, status, updatedAt) {
     const doc = {
-      _id: { clientId, transactionId },
+      _id: { clientId, direction: 'OUTWARD', transactionId },
       clientId,
+      direction: 'OUTWARD',
       transactionId,
       status,
       requestData: { amount: 500 },
@@ -64,10 +65,10 @@ describe('Transaction archival — STORY-06-01 (integration, real MongoDB)', () 
     const result = await archivalService.sweep(now);
     assert.equal(result.archived, 1);
 
-    const stillInHot = await transactionRepository.findByTransactionId('CLIENT_ARCH_A', 'OLD1');
+    const stillInHot = await transactionRepository.findByTransactionId('CLIENT_ARCH_A', 'OUTWARD', 'OLD1');
     assert.equal(stillInHot, null, 'the record must be removed from the hot collection once archived');
 
-    const archived = await archiveRepository.findByTransactionId('CLIENT_ARCH_A', 'OLD1');
+    const archived = await archiveRepository.findByTransactionId('CLIENT_ARCH_A', 'OUTWARD', 'OLD1');
     assert.ok(archived, 'the record must be retrievable from the archive by the same compound key');
     assert.equal(archived.status, 'APPROVED');
     assert.equal(archived.requestData.amount, 500);
@@ -80,7 +81,7 @@ describe('Transaction archival — STORY-06-01 (integration, real MongoDB)', () 
     const result = await archivalService.sweep(now);
     assert.equal(result.archived, 0);
 
-    const stillInHot = await transactionRepository.findByTransactionId('CLIENT_ARCH_B', 'RECENT1');
+    const stillInHot = await transactionRepository.findByTransactionId('CLIENT_ARCH_B', 'OUTWARD', 'RECENT1');
     assert.ok(stillInHot, 'a recent record must stay in the hot collection');
     const archived = await archiveRepository.findByTransactionId('CLIENT_ARCH_B', 'RECENT1');
     assert.equal(archived, null);
@@ -90,8 +91,9 @@ describe('Transaction archival — STORY-06-01 (integration, real MongoDB)', () 
     const now = new Date();
     const oldEnough = new Date(now.getTime() - NINETY_ONE_DAYS_MS);
     await db.collection(TRANSACTIONS_COLLECTION).insertOne({
-      _id: { clientId: 'CLIENT_ARCH_C', transactionId: 'OLDPENDING' },
+      _id: { clientId: 'CLIENT_ARCH_C', direction: 'OUTWARD', transactionId: 'OLDPENDING' },
       clientId: 'CLIENT_ARCH_C',
+      direction: 'OUTWARD',
       transactionId: 'OLDPENDING',
       status: 'PENDING',
       requestData: { amount: 500 },
@@ -101,7 +103,7 @@ describe('Transaction archival — STORY-06-01 (integration, real MongoDB)', () 
 
     const result = await archivalService.sweep(now);
     assert.equal(result.archived, 0);
-    const stillInHot = await transactionRepository.findByTransactionId('CLIENT_ARCH_C', 'OLDPENDING');
+    const stillInHot = await transactionRepository.findByTransactionId('CLIENT_ARCH_C', 'OUTWARD', 'OLDPENDING');
     assert.ok(stillInHot, 'a PENDING claim must never be archived, however old');
   });
 
@@ -115,7 +117,7 @@ describe('Transaction archival — STORY-06-01 (integration, real MongoDB)', () 
 
     const result = await archivalService.sweep(now);
     assert.equal(result.archived, 1, 'the sweep must still complete the delete step on retry, even though the copy already existed');
-    const stillInHot = await transactionRepository.findByTransactionId('CLIENT_ARCH_D', 'RETRY1');
+    const stillInHot = await transactionRepository.findByTransactionId('CLIENT_ARCH_D', 'OUTWARD', 'RETRY1');
     assert.equal(stillInHot, null);
   });
 
@@ -134,7 +136,7 @@ describe('Transaction archival — STORY-06-01 (integration, real MongoDB)', () 
     await seedTerminal('CLIENT_ARCH_E', 'ARCHIVED1', 'APPROVED', oldEnough);
     await archivalService.sweep(now);
 
-    const status = await transactionService.getStatus('CLIENT_ARCH_E', 'ARCHIVED1');
+    const status = await transactionService.getStatus('CLIENT_ARCH_E', 'OUTWARD', 'ARCHIVED1');
     assert.equal(status.status, 'APPROVED');
     assert.equal(status.transactionId, 'ARCHIVED1');
   });

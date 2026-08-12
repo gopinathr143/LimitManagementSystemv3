@@ -32,7 +32,7 @@ export function createResolveClientId(clientService) {
         return next(AppError.forbidden('Client is not active.', 'CLIENT_NOT_ACTIVE'));
       }
 
-      req.tenant = { clientId: client.clientId, timezone: client.timezone };
+      req.tenant = { clientId: client.clientId, timezone: client.timezone, enabledDirections: client.enabledDirections ?? [] };
       return next();
     } catch (error) {
       return next(error);
