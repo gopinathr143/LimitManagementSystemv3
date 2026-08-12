@@ -1,5 +1,5 @@
 import { AppError } from '../utils/AppError.js';
-import { KNOWN_TRANSACTION_ATTRIBUTES, TRANSACTION_STATUS } from '../constants/index.js';
+import { KNOWN_TRANSACTION_ATTRIBUTES, TRANSACTION_STATUS, ALL_DIRECTIONS } from '../constants/index.js';
 
 export const TRANSACTIONS_COLLECTION = 'transactions';
 
@@ -21,11 +21,32 @@ function isNonNegativeInteger(value) {
 }
 
 /**
+ * BRD §2.1.6 / STORY-08-01 AC1/AC2 — direction cannot be derived from
+ * anything trusted server side (the same client submits both directions
+ * over the same credential, unlike clientId), so it must come from the
+ * payload and is checked FIRST, before any other validation or counter
+ * access, and is never defaulted. Deliberately a distinct error from the
+ * generic payload VALIDATION_ERROR below so "direction missing" and
+ * "direction unrecognised" are each individually distinguishable, per AC2's
+ * "a clear error naming the accepted values."
+ */
+function assertDirectionPresentAndRecognized(payload) {
+  if (payload?.direction === undefined || payload?.direction === null) {
+    throw AppError.badRequest('direction is required and is never defaulted to OUTWARD (BRD §2.1.6).', 'DIRECTION_REQUIRED');
+  }
+  if (!ALL_DIRECTIONS.includes(payload.direction)) {
+    throw AppError.badRequest(`direction must be one of ${ALL_DIRECTIONS.join(', ')}, got: '${payload.direction}'.`, 'DIRECTION_UNRECOGNIZED');
+  }
+}
+
+/**
  * BRD §3.2 "Request Data: Transaction ID, UCIC, Account Number, Amount,
  * Channel, MCC, Timestamp." `amount` is validated the same way limit
  * thresholds are (§2.3.2) — integer paise, no floating point.
  */
 export function validateTransactionRequest(payload) {
+  assertDirectionPresentAndRecognized(payload);
+
   const errors = [];
 
   if (typeof payload?.transactionId !== 'string' || !TRANSACTION_ID_PATTERN.test(payload.transactionId)) {
@@ -50,13 +71,15 @@ export function validateTransactionRequest(payload) {
     throw AppError.badRequest('Transaction payload failed validation.', 'VALIDATION_ERROR', { errors });
   }
 
-  return { transactionId: payload.transactionId, amount: payload.amount, attributes };
+  return { direction: payload.direction, transactionId: payload.transactionId, amount: payload.amount, attributes };
 }
 
-export function buildClaimDocument({ clientId, transactionId, requestData, now, instanceId }) {
+/** BRD §3.1/§3.2 / STORY-08-02 — `_id` gains the direction segment: `{clientId, direction, transactionId}`. An outward and an inward transaction sharing the identical transactionId now claim different mutexes entirely (AC3/UAT 50). */
+export function buildClaimDocument({ clientId, direction, transactionId, requestData, now, instanceId }) {
   return {
-    _id: { clientId, transactionId },
+    _id: { clientId, direction, transactionId },
     clientId,
+    direction,
     transactionId,
     status: TRANSACTION_STATUS.PENDING,
     requestData,

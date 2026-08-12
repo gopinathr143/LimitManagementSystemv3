@@ -24,13 +24,13 @@ export class StaleClaimReaperService {
     let reaped = 0;
     for (const claim of staleClaims) {
       // eslint-disable-next-line no-await-in-loop
-      const result = await this.transactionRepository.abandon(claim.clientId, claim.transactionId, now);
+      const result = await this.transactionRepository.abandon(claim.clientId, claim.direction, claim.transactionId, now);
       if (result.matchedCount === 1) {
         reaped += 1;
         // BRD §3.5 — the reconciliation sweeper (EPIC-05, not yet built) is the authoritative
         // repair path for any increments this crashed request could not itself compensate;
         // `needsReconciliation: true` on the abandoned doc is the hand-off point.
-        logger.warn({ clientId: claim.clientId, transactionId: claim.transactionId }, 'Stale PENDING claim abandoned; referred to reconciliation');
+        logger.warn({ clientId: claim.clientId, direction: claim.direction, transactionId: claim.transactionId }, 'Stale PENDING claim abandoned; referred to reconciliation');
       }
       // matchedCount === 0 means the claim resolved normally between the scan and this write — AC3, left untouched.
     }

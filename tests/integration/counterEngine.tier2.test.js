@@ -32,6 +32,7 @@ describe('CounterEngineService Tier 2 — STORY-03-04/03-05 (integration, real M
     const now = new Date();
     const windowEntry = windowEntryWithShardFactor(16, now);
     const opts = {
+      direction: 'OUTWARD',
       dimensionCode: 'GLOBAL',
       windowType: 'DAILY_CALENDAR',
       attributeValues: [],
@@ -55,7 +56,7 @@ describe('CounterEngineService Tier 2 — STORY-03-04/03-05 (integration, real M
   test('AC2: after a known number of approvals, the summed total matches exactly', async () => {
     const now = new Date();
     const windowEntry = windowEntryWithShardFactor(8, now);
-    const opts = { dimensionCode: 'CHANNEL', windowType: 'DAILY_CALENDAR', attributeValues: ['MOBILE'], timezone: 'UTC', windowEntry, txnAmount: 25, thresholdAmount: 1000000, now };
+    const opts = { direction: 'OUTWARD', dimensionCode: 'CHANNEL', windowType: 'DAILY_CALENDAR', attributeValues: ['MOBILE'], timezone: 'UTC', windowEntry, txnAmount: 25, thresholdAmount: 1000000, now };
 
     const results = await Promise.all(Array.from({ length: 50 }, () => engine.checkAndIncrementTier2('CLIENT_HOT', opts)));
     assert.ok(results.every((r) => r.passed));
@@ -68,7 +69,7 @@ describe('CounterEngineService Tier 2 — STORY-03-04/03-05 (integration, real M
   test('AC3: reversing a Tier 2 approval decrements the specific recorded bucket and the summed total reduces correctly', async () => {
     const now = new Date();
     const windowEntry = windowEntryWithShardFactor(8, now);
-    const opts = { dimensionCode: 'CHANNEL', windowType: 'DAILY_CALENDAR', attributeValues: ['WEB'], timezone: 'UTC', windowEntry, txnAmount: 300, thresholdAmount: 1000000, now };
+    const opts = { direction: 'OUTWARD', dimensionCode: 'CHANNEL', windowType: 'DAILY_CALENDAR', attributeValues: ['WEB'], timezone: 'UTC', windowEntry, txnAmount: 300, thresholdAmount: 1000000, now };
 
     const applied = await engine.checkAndIncrementTier2('CLIENT_HOT', opts);
     assert.equal(applied.passed, true);
@@ -86,7 +87,7 @@ describe('CounterEngineService Tier 2 — STORY-03-04/03-05 (integration, real M
     const windowEntry = windowEntryWithShardFactor(4, now);
     const THRESHOLD = 1000;
     const TXN_AMOUNT = 50;
-    const opts = { dimensionCode: 'GLOBAL', windowType: 'DAILY_CALENDAR', attributeValues: [], timezone: 'UTC', windowEntry, txnAmount: TXN_AMOUNT, thresholdAmount: THRESHOLD, now };
+    const opts = { direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'DAILY_CALENDAR', attributeValues: [], timezone: 'UTC', windowEntry, txnAmount: TXN_AMOUNT, thresholdAmount: THRESHOLD, now };
 
     const CONCURRENT = 60; // far more than could ever fit
     const results = await Promise.all(Array.from({ length: CONCURRENT }, () => engine.checkAndIncrementTier2('CLIENT_HOT', opts)));
@@ -104,7 +105,7 @@ describe('CounterEngineService Tier 2 — STORY-03-04/03-05 (integration, real M
     const shortCacheEngine = new CounterEngineService(counterRepository, null, { hotCache: { refreshIntervalMs: REFRESH_MS } });
     const now = new Date();
     const windowEntry = windowEntryWithShardFactor(4, now);
-    const baseKey = 'limit:CLIENT_STALE:GLOBAL:DAILY_CALENDAR:2099-01-01';
+    const baseKey = 'limit:CLIENT_STALE:OUTWARD:GLOBAL:DAILY_CALENDAR:2099-01-01';
     const shardKeys = [0, 1, 2, 3].map((i) => `${baseKey}#${i}`);
 
     // Cold read establishes the cache entry at amount 0.
@@ -128,6 +129,7 @@ describe('CounterEngineService Tier 2 — STORY-03-04/03-05 (integration, real M
     // "Not hot" is a routing decision made by the caller (dimension.hot === false selects Tier 1); this
     // proves the same underlying counter repository serves both paths without shard suffixes for Tier 1.
     const result = await engine.checkAndIncrementTier1('CLIENT_COLD', {
+      direction: 'OUTWARD',
       dimensionCode: 'MCC',
       windowType: 'DAILY_CALENDAR',
       attributeValues: ['5411'],

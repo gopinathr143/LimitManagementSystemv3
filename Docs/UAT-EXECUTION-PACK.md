@@ -2,7 +2,7 @@
 
 **Source:** BRD v7.0, Section 6 (Acceptance Criteria), UAT 1 – UAT 52
 **Story:** [STORY-07-03 — Formal UAT execution pack](stories/STORY-07-03-formal-uat-execution-pack.md)
-**Prepared:** 2026-08-11, by this session's implementation work across EPIC-01 – EPIC-07
+**Prepared:** 2026-08-11, by this session's implementation work across EPIC-01 – EPIC-07; updated 2026-08-12 for EPIC-08 (direction scoping / INWARD readiness)
 **Business/risk owner sign-off:** **not obtained** — no such stakeholder exists in this session; see the Sign-off section at the end
 
 ## How to read this pack
@@ -12,7 +12,7 @@ Per the backlog's own rule (`00-INDEX.md`): *"A case with no recorded result is 
 - **PASS** — the case has a real, passing automated test against real infrastructure (never a mock), traceable below.
 - **PASS (structural)** — the case's underlying guarantee holds by construction (a design property, not a single test), with the reasoning and its test coverage cited.
 - **MEASURED, NOT CERTIFIED** — a real test was run and real numbers were captured, but the test environment (a single laptop, single-node MongoDB replica set) cannot honestly stand in for the BRD's stated production target. The measurement is real; the certification is not.
-- **NOT YET IMPLEMENTED** — the feature this case exercises does not exist yet (EPIC-08, not built in this session).
+- **NOT YET IMPLEMENTED** — the feature this case exercises does not exist yet (STORY-08-04's `COMBINED` direction scope — deliberately deferred, see its story file).
 - **SUPERSEDED** — the case tests a mechanism (authentication) that a later, explicit architectural decision removed; see the cited story for the decision record.
 
 ## Traceability matrix
@@ -63,28 +63,28 @@ Per the backlog's own rule (`00-INDEX.md`): *"A case with no recorded result is 
 | 42 | A dimension declaring both daily windows rejects on breaching either independently | STORY-02-02 | PASS | `tests/integration/transaction.waterfall.test.js` AC3 (daily + monthly independence, same mechanism) |
 | 43 | A new MONTHLY window mid-month is PENDING_ACTIVATION until the boundary; WARMING enforces immediately with the audit flag | STORY-02-03 | PASS | `tests/integration/registry.test.js` AC4 (derived window state); `transaction.waterfall.test.js` (warming propagation) |
 | 44 | Approve under a dimension/window, de-activate it; reversal skips the ungoverned key without erroring, other windows still decrement | STORY-05-01 | PASS | `tests/integration/transaction.reversal.test.js` AC5 |
-| 45 | Outward and inward transactions, same dimension/attributes, increment separate counters | STORY-08-02 | NOT YET IMPLEMENTED | EPIC-08 not built in this session |
-| 46 | Divergent dimension sets per direction; each evaluates only its own | STORY-08-03 | NOT YET IMPLEMENTED | EPIC-08 not built |
-| 47 | A COMBINED dimension shares one counter across directions | STORY-08-04 | NOT YET IMPLEMENTED | EPIC-08 not built |
-| 48 | An asymmetric COMBINED declaration is rejected by registry validation | STORY-08-04 | NOT YET IMPLEMENTED | EPIC-08 not built |
-| 49 | Missing/unrecognised/not-enabled direction all rejected before any counter access | STORY-08-01 | NOT YET IMPLEMENTED | EPIC-08 not built |
-| 50 | Identical Transaction ID across outward and inward processed independently | STORY-08-02 | NOT YET IMPLEMENTED | EPIC-08 not built |
-| 51 | Inert inward registry/limits stored but ineffective until INWARD enabled | STORY-08-05 | NOT YET IMPLEMENTED | EPIC-08 not built |
-| 52 | A legacy config with no `directions` map normalises to outward-only, unchanged enforcement | STORY-08-03 | NOT YET IMPLEMENTED | EPIC-08 not built |
+| 45 | Outward and inward transactions, same dimension/attributes, increment separate counters | STORY-08-02 | PASS | `tests/integration/direction.test.js` "STORY-08-02" AC1 — identical client/dimension/attributes across both directions, two distinct counter keys, independently correct amounts |
+| 46 | Divergent dimension sets per direction; each evaluates only its own | STORY-08-03 | PASS | `tests/integration/direction.test.js` "STORY-08-03" AC1/AC2 — a dimension declared only in one direction's registry never affects the other; the same dimensionCode in both directions enforces independent thresholds |
+| 47 | A COMBINED dimension shares one counter across directions | STORY-08-04 | NOT YET IMPLEMENTED | Deliberately deferred — STORY-08-04 is `Blocked` pending risk-function confirmation that a combined control is required at all; see that story's Notes for the written, accepted decision. Only the reserved `COMBINED_DIRECTION_SEGMENT` constant exists, no logic |
+| 48 | An asymmetric COMBINED declaration is rejected by registry validation | STORY-08-04 | NOT YET IMPLEMENTED | Same deferral as UAT 47 |
+| 49 | Missing/unrecognised/not-enabled direction all rejected before any counter access | STORY-08-01 | PASS | `tests/integration/direction.test.js` "STORY-08-01" AC1/AC2/AC3 — all three rejection paths proven against real MongoDB, including that no counter document is ever written |
+| 50 | Identical Transaction ID across outward and inward processed independently | STORY-08-02 | PASS | `tests/integration/direction.test.js` "STORY-08-02" AC3 — identical transactionId submitted concurrently for both directions; both process independently, idempotent replay resolves only to its own direction, no cross-direction double-increment |
+| 51 | Inert inward registry/limits stored but ineffective until INWARD enabled | STORY-08-05 | PASS | `tests/integration/direction.test.js` "STORY-08-05" AC1/AC2 — a full INWARD registry and a tight INWARD limit are authored and reported `effective: false` while disabled, outward traffic is unaffected; enabling INWARD enforces the identical stored policy immediately with no code change |
+| 52 | A legacy config with no `directions` map normalises to outward-only, unchanged enforcement | STORY-08-03 | PASS | `tests/integration/direction.test.js` "STORY-08-03" AC3 — a hand-inserted pre-EPIC-08 document (top-level `allowedDimensions`, no `directions` map) loads and enforces OUTWARD unchanged, and is left unmodified on disk (normalisation happens at the read boundary only) |
 
 ## Summary
 
 | Status | Count | UATs |
 | :--- | :--- | :--- |
-| PASS (incl. structural) | 41 | 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44 |
+| PASS (incl. structural) | 47 | 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 49, 50, 51, 52 |
 | MEASURED, NOT CERTIFIED | 2 | 5, 19 |
 | SUPERSEDED | 1 | 27 |
-| NOT YET IMPLEMENTED | 8 | 45, 46, 47, 48, 49, 50, 51, 52 |
+| NOT YET IMPLEMENTED | 2 | 47, 48 |
 
-- **41 of 52** UAT cases have a recorded PASS, each traceable to a real, passing automated test against real MongoDB (no mocks anywhere in this codebase's test suite).
+- **47 of 52** UAT cases have a recorded PASS, each traceable to a real, passing automated test against real MongoDB (no mocks anywhere in this codebase's test suite). This now includes all six of EPIC-08's structural/functional cases (UAT 45, 46, 49, 50, 51, 52), added by `tests/integration/direction.test.js`.
 - **2** (UAT 5, UAT 19) have real, captured measurements from this local environment but are honestly **not** a certification of the BRD's literal 1,000 RPS production figures — that needs the shared, production-representative load-test environment named throughout STORY-07-01/07-02's Definition of Done.
 - **1** (UAT 27) is superseded by the explicit, recorded architectural decision to remove authentication.
-- **8** (UAT 45-52) test EPIC-08 (direction scoping / INWARD readiness), which has not been built in this session — per the backlog's own sequencing (`00-INDEX.md`), EPIC-08's structural stories were meant to land alongside EPIC-03/04, which did not happen here since EPICs were delivered strictly in numeric order per this project's actual instruction.
+- **2** (UAT 47, 48) test STORY-08-04's `COMBINED` direction scope, which is deliberately `Blocked` — a written, accepted deferral pending risk-function confirmation that the control is required at all, not an oversight. See STORY-08-04's Notes / Risks for the full rationale and the reserved-but-unbuilt wire format.
 
 ## Sign-off
 

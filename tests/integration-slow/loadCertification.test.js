@@ -29,13 +29,13 @@ async function seedRegistry(db) {
     { code: 'UCIC_CHANNEL', attributes: ['ucic', 'channel'], hot: false, windows: warming({ DAILY_CALENDAR: {} }) },
   ];
   const normalized = validateAndNormalizeRegistry(dimensions, { previousRegistry: null, timezone: TZ, now });
-  const doc = buildRegistryDocument({ clientId: CLIENT_ID, allowedDimensions: normalized, configVersion: 1, limitsVersion: 1, actor: 'load-cert', now });
+  const doc = buildRegistryDocument({ clientId: CLIENT_ID, directions: { OUTWARD: { allowedDimensions: normalized } }, configVersion: 1, limitsVersion: 1, actor: 'load-cert', now });
   await db.collection(CLIENT_CONFIGS_COLLECTION).insertOne(doc);
 }
 
 async function seedLimit(db, { dimensionCode, windowType, thresholdAmount, thresholdCount }) {
   const now = new Date();
-  const normalized = validateLimitDefinitionCreate({ dimensionCode, windowType, thresholdAmount, thresholdCount });
+  const normalized = validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode, windowType, thresholdAmount, thresholdCount });
   const doc = buildLimitDefinitionDocument({ clientId: CLIENT_ID, normalized, actor: 'load-cert', now });
   await db.collection(LIMITS_COLLECTION).insertOne({ ...doc, clientId: CLIENT_ID });
 }
@@ -126,8 +126,9 @@ describe('Sustained throughput and latency certification — STORY-07-01 (integr
         const t0 = process.hrtime.bigint();
         const res = await transactionService.submit(
           CLIENT_ID,
-          { transactionId: `LOAD-${i}`, amount: 100 + (i % 500), ucic: `U${i % 200}`, channel: i % 2 === 0 ? 'MOBILE' : 'WEB' },
+          { direction: 'OUTWARD', transactionId: `LOAD-${i}`, amount: 100 + (i % 500), ucic: `U${i % 200}`, channel: i % 2 === 0 ? 'MOBILE' : 'WEB' },
           TZ,
+          ['OUTWARD'],
         );
         const elapsedMs = Number(process.hrtime.bigint() - t0) / 1e6;
         samplesMs.push(elapsedMs);
@@ -164,7 +165,7 @@ describe('Sustained throughput and latency certification — STORY-07-01 (integr
         const t0 = process.hrtime.bigint();
         await request(app)
           .post(`/clients/${CLIENT_ID}/transactions`)
-          .send({ transactionId: `LOAD-E2E-${i}`, amount: 250, ucic: `E2E-U${i % 50}`, channel: 'MOBILE' });
+          .send({ direction: 'OUTWARD', transactionId: `LOAD-E2E-${i}`, amount: 250, ucic: `E2E-U${i % 50}`, channel: 'MOBILE' });
         samplesMs.push(Number(process.hrtime.bigint() - t0) / 1e6);
       });
 
@@ -184,8 +185,9 @@ describe('Sustained throughput and latency certification — STORY-07-01 (integr
       const t0 = process.hrtime.bigint();
       // eslint-disable-next-line no-await-in-loop
       await transactionRepository.claim(CLIENT_ID, {
-        _id: { clientId: CLIENT_ID, transactionId: `CLAIM-COST-${i}` },
+        _id: { clientId: CLIENT_ID, direction: 'OUTWARD', transactionId: `CLAIM-COST-${i}` },
         clientId: CLIENT_ID,
+        direction: 'OUTWARD',
         transactionId: `CLAIM-COST-${i}`,
         status: 'PENDING',
         requestData: { amount: 100 },
@@ -217,7 +219,7 @@ describe('Sustained throughput and latency certification — STORY-07-01 (integr
     try {
       const transactionService = app.locals.services.transactionService;
       await runWithConcurrency(200, 20, (i) =>
-        transactionService.submit(CLIENT_ID, { transactionId: `NOCFG-${i}`, amount: 100, ucic: `NC${i % 20}` }, TZ),
+        transactionService.submit(CLIENT_ID, { direction: 'OUTWARD', transactionId: `NOCFG-${i}`, amount: 100, ucic: `NC${i % 20}` }, TZ, ['OUTWARD']),
       );
     } finally {
       configCache.registryRepository.findByClientId = originalFindByClientId;

@@ -28,12 +28,18 @@ export class ConfigCache {
     return this.entries.get(clientId) ?? null;
   }
 
-  getRegistry(clientId) {
-    return this.entries.get(clientId)?.registry ?? null;
+  /** STORY-08-03 — `registry` is now the full multi-direction document; this narrows to one direction's snapshot, the same shape every pre-EPIC-08 consumer (findDimension, isWindowEnforced, ...) already expects. */
+  getRegistry(clientId, direction) {
+    return this.entries.get(clientId)?.registry?.directions?.[direction] ?? null;
   }
 
-  getDefinitions(clientId) {
-    return this.entries.get(clientId)?.definitions ?? null;
+  /** `direction` narrows to that direction's definitions; omitted returns every direction's (used by admin listings that show both). */
+  getDefinitions(clientId, direction) {
+    const definitions = this.entries.get(clientId)?.definitions;
+    if (!definitions) {
+      return null;
+    }
+    return direction ? definitions.filter((def) => def.direction === direction) : definitions;
   }
 
   /** STORY-02-06 AC3 — on failure, the previous entry (if any) is left completely untouched. */

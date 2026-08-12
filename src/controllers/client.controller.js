@@ -40,4 +40,14 @@ export class ClientController {
       next(error);
     }
   };
+
+  /** STORY-08-03 AC5 — a direction is only ever enabled through this guarded path, never via the general `update`. */
+  setEnabledDirections = async (req, res, next) => {
+    try {
+      const result = await this.clientService.setEnabledDirections(req.params.clientId, req.body?.enabledDirections, req.actor);
+      res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  };
 }

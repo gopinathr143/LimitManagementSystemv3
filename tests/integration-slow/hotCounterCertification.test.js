@@ -20,13 +20,13 @@ async function seedHotClient(db, clientId, shardFactor, thresholdCount) {
   const now = new Date();
   const dimensions = [{ code: 'GLOBAL', attributes: [], hot: true, shardFactor, windows: warming({ DAILY_CALENDAR: {} }) }];
   const normalized = validateAndNormalizeRegistry(dimensions, { previousRegistry: null, timezone: TZ, now });
-  const registryDoc = buildRegistryDocument({ clientId, allowedDimensions: normalized, configVersion: 1, limitsVersion: 1, actor: 'hot-cert', now });
+  const registryDoc = buildRegistryDocument({ clientId, directions: { OUTWARD: { allowedDimensions: normalized } }, configVersion: 1, limitsVersion: 1, actor: 'hot-cert', now });
   await db.collection(CLIENT_CONFIGS_COLLECTION).insertOne(registryDoc);
 
   await db.collection(LIMITS_COLLECTION).insertOne({
     ...buildLimitDefinitionDocument({
       clientId,
-      normalized: validateLimitDefinitionCreate({ dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 10_000_000 }),
+      normalized: validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'PER_TXN', thresholdAmount: 10_000_000 }),
       actor: 'hot-cert',
       now,
     }),
@@ -36,7 +36,7 @@ async function seedHotClient(db, clientId, shardFactor, thresholdCount) {
     ...buildLimitDefinitionDocument({
       clientId,
       // Count-capped, not amount-capped — makes "how many were approved beyond K" a direct overshoot count.
-      normalized: validateLimitDefinitionCreate({ dimensionCode: 'GLOBAL', windowType: 'DAILY_CALENDAR', thresholdAmount: 10_000_000, thresholdCount }),
+      normalized: validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode: 'GLOBAL', windowType: 'DAILY_CALENDAR', thresholdAmount: 10_000_000, thresholdCount }),
       actor: 'hot-cert',
       now,
     }),
@@ -101,7 +101,7 @@ describe('Hot counter concurrency certification — STORY-07-02 (integration-slo
     let approved = 0;
     await runWithConcurrency(count, concurrency, async (i) => {
       const t0 = process.hrtime.bigint();
-      const res = await transactionService.submit(clientId, { transactionId: `HOT-${clientId}-${i}`, amount: 10 }, TZ);
+      const res = await transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: `HOT-${clientId}-${i}`, amount: 10 }, TZ, ['OUTWARD']);
       samplesMs.push(Number(process.hrtime.bigint() - t0) / 1e6);
       if (res.body?.data?.status === 'APPROVED') approved += 1;
     });

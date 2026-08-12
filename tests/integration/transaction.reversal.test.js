@@ -18,19 +18,19 @@ const TZ = 'UTC';
 async function seedRegistry(db, clientId, dimensions) {
   const now = new Date();
   const normalized = validateAndNormalizeRegistry(dimensions, { previousRegistry: null, timezone: TZ, now });
-  const doc = buildRegistryDocument({ clientId, allowedDimensions: normalized, configVersion: 1, limitsVersion: 1, actor: 'test', now });
+  const doc = buildRegistryDocument({ clientId, directions: { OUTWARD: { allowedDimensions: normalized } }, configVersion: 1, limitsVersion: 1, actor: 'test', now });
   await db.collection(CLIENT_CONFIGS_COLLECTION).insertOne(doc);
 }
 
 async function replaceRegistry(db, clientId, dimensions) {
   const now = new Date();
   const normalized = validateAndNormalizeRegistry(dimensions, { previousRegistry: null, timezone: TZ, now });
-  await db.collection(CLIENT_CONFIGS_COLLECTION).updateOne({ _id: clientId }, { $set: { allowedDimensions: normalized, updatedAt: now } });
+  await db.collection(CLIENT_CONFIGS_COLLECTION).updateOne({ _id: clientId }, { $set: { 'directions.OUTWARD.allowedDimensions': normalized, updatedAt: now } });
 }
 
 async function seedLimit(db, clientId, { dimensionCode, windowType, thresholdAmount, thresholdCount, scope }) {
   const now = new Date();
-  const normalized = validateLimitDefinitionCreate({ dimensionCode, windowType, thresholdAmount, thresholdCount, scope });
+  const normalized = validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode, windowType, thresholdAmount, thresholdCount, scope });
   const doc = buildLimitDefinitionDocument({ clientId, normalized, actor: 'test', now });
   await db.collection(LIMITS_COLLECTION).insertOne({ ...doc, clientId });
 }
@@ -91,7 +91,7 @@ describe('Reversal API — STORY-05-01 (integration, real MongoDB)', () => {
     await seedLimit(db, clientId, { dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 1000000 });
     await harness.configCache.warm([clientId]);
 
-    const approved = await harness.transactionService.submit(clientId, { transactionId: 'REV1', amount: 300, ucic: 'U1' }, TZ);
+    const approved = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'REV1', amount: 300, ucic: 'U1'  }, TZ, ['OUTWARD']);
     assert.equal(approved.body.data.status, 'APPROVED');
     const globalKey = approved.body.data.appliedCounterKeys.find((k) => k.dimensionCode === 'GLOBAL');
     const ucicKey = approved.body.data.appliedCounterKeys.find((k) => k.dimensionCode === 'UCIC');
@@ -101,7 +101,7 @@ describe('Reversal API — STORY-05-01 (integration, real MongoDB)', () => {
     const beforeGlobal = await db.collection(COUNTERS_COLLECTION).findOne({ _id: globalKey.key });
     assert.equal(beforeGlobal.amount, 300);
 
-    const result = await harness.transactionService.reverseTransaction(clientId, 'REV1', 'customer-requested');
+    const result = await harness.transactionService.reverseTransaction(clientId, 'OUTWARD', 'REV1', 'customer-requested');
     assert.equal(result.httpStatus, 200);
     assert.equal(result.body.data.status, 'REVERSED');
     assert.equal(result.body.data.reversedCounters.length, 2);
@@ -113,7 +113,7 @@ describe('Reversal API — STORY-05-01 (integration, real MongoDB)', () => {
     const afterUcic = await db.collection(COUNTERS_COLLECTION).findOne({ _id: ucicKey.key });
     assert.equal(afterUcic.amount, 0);
 
-    const txnDoc = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId, transactionId: 'REV1' } });
+    const txnDoc = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId, direction: 'OUTWARD', transactionId: 'REV1' } });
     assert.equal(txnDoc.status, 'REVERSED');
     assert.equal(txnDoc.reversalReason, 'customer-requested');
     assert.ok(txnDoc.reversedAt instanceof Date);
@@ -126,12 +126,12 @@ describe('Reversal API — STORY-05-01 (integration, real MongoDB)', () => {
     await seedLimit(db, clientId, { dimensionCode: 'GLOBAL', windowType: 'DAILY_CALENDAR', thresholdAmount: 1000000 });
     await harness.configCache.warm([clientId]);
 
-    await harness.transactionService.submit(clientId, { transactionId: 'REV2', amount: 500 }, TZ);
-    const first = await harness.transactionService.reverseTransaction(clientId, 'REV2');
+    await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'REV2', amount: 500  }, TZ, ['OUTWARD']);
+    const first = await harness.transactionService.reverseTransaction(clientId, 'OUTWARD', 'REV2');
     assert.equal(first.body.data.reversedCounters.length, 1);
     assert.equal(await sumCounters(db, clientId), 0);
 
-    const second = await harness.transactionService.reverseTransaction(clientId, 'REV2');
+    const second = await harness.transactionService.reverseTransaction(clientId, 'OUTWARD', 'REV2');
     assert.equal(second.httpStatus, 200);
     assert.equal(second.body.data.alreadyReversed, true);
     assert.equal(second.body.data.reversedCounters, undefined);
@@ -145,11 +145,11 @@ describe('Reversal API — STORY-05-01 (integration, real MongoDB)', () => {
     await seedLimit(db, clientId, { dimensionCode: 'GLOBAL', windowType: 'DAILY_CALENDAR', thresholdAmount: 1000000 });
     await harness.configCache.warm([clientId]);
 
-    await harness.transactionService.submit(clientId, { transactionId: 'REV3', amount: 400 }, TZ);
+    await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'REV3', amount: 400  }, TZ, ['OUTWARD']);
 
     const [a, b] = await Promise.all([
-      harness.transactionService.reverseTransaction(clientId, 'REV3'),
-      harness.transactionService.reverseTransaction(clientId, 'REV3'),
+      harness.transactionService.reverseTransaction(clientId, 'OUTWARD', 'REV3'),
+      harness.transactionService.reverseTransaction(clientId, 'OUTWARD', 'REV3'),
     ]);
 
     const responses = [a, b];
@@ -167,16 +167,16 @@ describe('Reversal API — STORY-05-01 (integration, real MongoDB)', () => {
     await seedLimit(db, clientId, { dimensionCode: 'GLOBAL', windowType: 'DAILY_CALENDAR', thresholdAmount: 1000000 });
     await harness.configCache.warm([clientId]);
 
-    const rejected = await harness.transactionService.submit(clientId, { transactionId: 'REV4A', amount: 999 }, TZ);
+    const rejected = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'REV4A', amount: 999  }, TZ, ['OUTWARD']);
     assert.equal(rejected.body.data.status, 'REJECTED');
 
-    const notReversible = await harness.transactionService.reverseTransaction(clientId, 'REV4A');
+    const notReversible = await harness.transactionService.reverseTransaction(clientId, 'OUTWARD', 'REV4A');
     assert.equal(notReversible.httpStatus, 409);
     assert.equal(notReversible.body.error.code, 'TRANSACTION_NOT_REVERSIBLE');
     assert.equal(await sumCounters(db, clientId), 0);
 
     await assert.rejects(
-      () => harness.transactionService.reverseTransaction(clientId, 'REV4-NEVER-EXISTED'),
+      () => harness.transactionService.reverseTransaction(clientId, 'OUTWARD', 'REV4-NEVER-EXISTED'),
       (err) => err.statusCode === 404 && err.code === 'TRANSACTION_NOT_FOUND',
     );
   });
@@ -192,7 +192,7 @@ describe('Reversal API — STORY-05-01 (integration, real MongoDB)', () => {
     await seedLimit(db, clientId, { dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 1000000 });
     await harness.configCache.warm([clientId]);
 
-    const approved = await harness.transactionService.submit(clientId, { transactionId: 'REV5', amount: 200, ucic: 'U1' }, TZ);
+    const approved = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'REV5', amount: 200, ucic: 'U1'  }, TZ, ['OUTWARD']);
     assert.equal(approved.body.data.status, 'APPROVED');
     const ucicKey = approved.body.data.appliedCounterKeys.find((k) => k.dimensionCode === 'UCIC');
     const globalKey = approved.body.data.appliedCounterKeys.find((k) => k.dimensionCode === 'GLOBAL');
@@ -201,7 +201,7 @@ describe('Reversal API — STORY-05-01 (integration, real MongoDB)', () => {
     await replaceRegistry(db, clientId, [{ code: 'GLOBAL', attributes: [], hot: false, windows: warming({ DAILY_CALENDAR: {} }) }]);
     await harness.configCache.refreshOne(clientId);
 
-    const result = await harness.transactionService.reverseTransaction(clientId, 'REV5');
+    const result = await harness.transactionService.reverseTransaction(clientId, 'OUTWARD', 'REV5');
     assert.equal(result.httpStatus, 200);
     const ucicResult = result.body.data.reversedCounters.find((r) => r.key === ucicKey.key);
     const globalResult = result.body.data.reversedCounters.find((r) => r.key === globalKey.key);
@@ -222,14 +222,14 @@ describe('Reversal API — STORY-05-01 (integration, real MongoDB)', () => {
     await seedLimit(db, clientId, { dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 1000000 });
     await harness.configCache.warm([clientId]);
 
-    const approved = await harness.transactionService.submit(clientId, { transactionId: 'REV6', amount: 300, ucic: 'U1' }, TZ);
+    const approved = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'REV6', amount: 300, ucic: 'U1'  }, TZ, ['OUTWARD']);
     assert.equal(approved.body.data.status, 'APPROVED');
     const ucicKey = approved.body.data.appliedCounterKeys.find((k) => k.dimensionCode === 'UCIC');
 
     // Simulate drift/corruption: the physical document no longer has enough balance to absorb the recorded decrement.
     await db.collection(COUNTERS_COLLECTION).updateOne({ _id: ucicKey.key }, { $set: { amount: 0, count: 0 } });
 
-    const result = await harness.transactionService.reverseTransaction(clientId, 'REV6');
+    const result = await harness.transactionService.reverseTransaction(clientId, 'OUTWARD', 'REV6');
     assert.equal(result.httpStatus, 200);
     const ucicResult = result.body.data.reversedCounters.find((r) => r.key === ucicKey.key);
     assert.equal(ucicResult.skipped, false);

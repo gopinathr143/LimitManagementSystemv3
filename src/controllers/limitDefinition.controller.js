@@ -24,8 +24,8 @@ export class LimitDefinitionController {
 
   list = async (req, res, next) => {
     try {
-      const { dimensionCode, windowType } = req.query;
-      const results = await this.limitDefinitionService.listDefinitions(req.tenant.clientId, { dimensionCode, windowType });
+      const { direction, dimensionCode, windowType } = req.query;
+      const results = await this.limitDefinitionService.listDefinitions(req.tenant.clientId, { direction, dimensionCode, windowType });
       res.status(200).json({ success: true, data: results.map((r) => toResponsePayload(r).data) });
     } catch (error) {
       next(error);

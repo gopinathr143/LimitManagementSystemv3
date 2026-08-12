@@ -21,6 +21,7 @@ const clientsValidator = {
       name: { bsonType: 'string', minLength: 1 },
       status: { enum: ['ACTIVE', 'SUSPENDED'] },
       timezone: { bsonType: 'string' },
+      enabledDirections: { bsonType: ['array', 'null'] },
       createdBy: { bsonType: 'string' },
       createdAt: { bsonType: 'date' },
       updatedAt: { bsonType: 'date' },
@@ -47,13 +48,14 @@ const configAuditValidator = {
 const clientConfigsValidator = {
   $jsonSchema: {
     bsonType: 'object',
-    required: ['_id', 'clientId', 'configVersion', 'limitsVersion', 'allowedDimensions', 'createdAt', 'updatedAt'],
+    required: ['_id', 'clientId', 'configVersion', 'limitsVersion', 'createdAt', 'updatedAt'],
     properties: {
       _id: { bsonType: 'string' },
       clientId: { bsonType: 'string' },
       configVersion: { bsonType: 'number', minimum: 1 },
       limitsVersion: { bsonType: 'number', minimum: 0 },
-      allowedDimensions: { bsonType: 'array' },
+      directions: { bsonType: ['object', 'null'] },
+      allowedDimensions: { bsonType: ['array', 'null'] },
       createdBy: { bsonType: 'string' },
       updatedBy: { bsonType: 'string' },
       createdAt: { bsonType: 'date' },
@@ -65,9 +67,10 @@ const clientConfigsValidator = {
 const limitsValidator = {
   $jsonSchema: {
     bsonType: 'object',
-    required: ['clientId', 'dimensionCode', 'windowType', 'currency', 'isActive', 'effectiveFrom', 'definitionVersion', 'createdAt', 'updatedAt'],
+    required: ['clientId', 'direction', 'dimensionCode', 'windowType', 'currency', 'isActive', 'effectiveFrom', 'definitionVersion', 'createdAt', 'updatedAt'],
     properties: {
       clientId: { bsonType: 'string' },
+      direction: { enum: ['OUTWARD', 'INWARD'] },
       dimensionCode: { bsonType: 'string' },
       scope: { bsonType: ['object', 'null'] },
       windowType: { enum: ['PER_TXN', 'DAILY_CALENDAR', 'DAILY_ROLLING', 'MONTHLY'] },
@@ -124,10 +127,11 @@ const countersValidator = {
 const transactionsValidator = {
   $jsonSchema: {
     bsonType: 'object',
-    required: ['_id', 'clientId', 'transactionId', 'status', 'requestData', 'claimedAt', 'updatedAt'],
+    required: ['_id', 'clientId', 'direction', 'transactionId', 'status', 'requestData', 'claimedAt', 'updatedAt'],
     properties: {
       _id: { bsonType: 'object' },
       clientId: { bsonType: 'string' },
+      direction: { enum: ['OUTWARD', 'INWARD'] },
       transactionId: { bsonType: 'string' },
       status: { enum: ['PENDING', 'APPROVED', 'REJECTED', 'REVERSED', 'ABANDONED', 'SYSTEM_FAILURE'] },
       requestData: { bsonType: 'object' },
@@ -149,10 +153,11 @@ const transactionsValidator = {
 const transactionsArchiveValidator = {
   $jsonSchema: {
     bsonType: 'object',
-    required: ['_id', 'clientId', 'transactionId', 'status', 'requestData', 'claimedAt', 'updatedAt'],
+    required: ['_id', 'clientId', 'direction', 'transactionId', 'status', 'requestData', 'claimedAt', 'updatedAt'],
     properties: {
       _id: { bsonType: 'object' },
       clientId: { bsonType: 'string' },
+      direction: { enum: ['OUTWARD', 'INWARD'] },
       transactionId: { bsonType: 'string' },
       status: { enum: ['PENDING', 'APPROVED', 'REJECTED', 'REVERSED', 'ABANDONED', 'SYSTEM_FAILURE'] },
       requestData: { bsonType: 'object' },

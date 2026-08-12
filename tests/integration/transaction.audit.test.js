@@ -16,13 +16,13 @@ import { LIMITS_COLLECTION, buildLimitDefinitionDocument, validateLimitDefinitio
 async function seedRegistry(db, clientId, dimensions, timezone = 'UTC') {
   const now = new Date();
   const normalized = validateAndNormalizeRegistry(dimensions, { previousRegistry: null, timezone, now });
-  const doc = buildRegistryDocument({ clientId, allowedDimensions: normalized, configVersion: 1, limitsVersion: 1, actor: 'test', now });
+  const doc = buildRegistryDocument({ clientId, directions: { OUTWARD: { allowedDimensions: normalized } }, configVersion: 1, limitsVersion: 1, actor: 'test', now });
   await db.collection(CLIENT_CONFIGS_COLLECTION).insertOne(doc);
 }
 
 async function seedLimit(db, clientId, { dimensionCode, windowType, thresholdAmount, thresholdCount, effectiveFrom }) {
   const now = new Date();
-  const normalized = validateLimitDefinitionCreate({ dimensionCode, windowType, thresholdAmount, thresholdCount, effectiveFrom });
+  const normalized = validateLimitDefinitionCreate({ direction: 'OUTWARD', dimensionCode, windowType, thresholdAmount, thresholdCount, effectiveFrom });
   const doc = buildLimitDefinitionDocument({ clientId, normalized, actor: 'test', now });
   await db.collection(LIMITS_COLLECTION).insertOne({ ...doc, clientId });
 }
@@ -81,11 +81,11 @@ describe('Audit record completeness — STORY-04-05 (integration, real MongoDB)'
     await seedLimit(db, clientId, { dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 100, thresholdCount: 5 });
     await harness.configCache.warm([clientId]);
 
-    await harness.transactionService.submit(clientId, { transactionId: 'AUD-1', amount: 100, ucic: 'U1' }, 'UTC');
-    const res = await harness.transactionService.submit(clientId, { transactionId: 'AUD-2', amount: 50, ucic: 'U1' }, 'UTC');
+    await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'AUD-1', amount: 100, ucic: 'U1' }, 'UTC', ['OUTWARD']);
+    const res = await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'AUD-2', amount: 50, ucic: 'U1' }, 'UTC', ['OUTWARD']);
     assert.equal(res.body.data.status, 'REJECTED');
 
-    const doc = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId, transactionId: 'AUD-2' } });
+    const doc = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId, direction: 'OUTWARD', transactionId: 'AUD-2' } });
     assert.equal(doc.rejection.dimensionCode, 'UCIC');
     assert.equal(doc.rejection.windowType, 'DAILY_CALENDAR');
     assert.deepEqual(doc.rejection.metrics, ['AMOUNT']);
@@ -106,8 +106,8 @@ describe('Audit record completeness — STORY-04-05 (integration, real MongoDB)'
     await seedLimit(db, clientId, { dimensionCode: 'UCIC', windowType: 'DAILY_CALENDAR', thresholdAmount: 1000000 });
     await harness.configCache.warm([clientId]);
 
-    await harness.transactionService.submit(clientId, { transactionId: 'AUD-3', amount: 250, ucic: 'U1' }, 'UTC');
-    const doc = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId, transactionId: 'AUD-3' } });
+    await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'AUD-3', amount: 250, ucic: 'U1' }, 'UTC', ['OUTWARD']);
+    const doc = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId, direction: 'OUTWARD', transactionId: 'AUD-3' } });
 
     assert.equal(doc.status, 'APPROVED');
     const globalKey = doc.appliedCounterKeys.find((k) => k.dimensionCode === 'GLOBAL');
@@ -131,8 +131,8 @@ describe('Audit record completeness — STORY-04-05 (integration, real MongoDB)'
     await seedLimit(db, clientId, { dimensionCode: 'GLOBAL', windowType: 'DAILY_CALENDAR', thresholdAmount: 1000000 });
     await harness.configCache.warm([clientId]);
 
-    await harness.transactionService.submit(clientId, { transactionId: 'AUD-4', amount: 10 }, 'UTC');
-    const doc = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId, transactionId: 'AUD-4' } });
+    await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'AUD-4', amount: 10 }, 'UTC', ['OUTWARD']);
+    const doc = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId, direction: 'OUTWARD', transactionId: 'AUD-4' } });
     assert.equal(doc.clientId, clientId);
     assert.equal(doc.transactionId, 'AUD-4');
   });
@@ -145,8 +145,8 @@ describe('Audit record completeness — STORY-04-05 (integration, real MongoDB)'
     await seedLimit(db, clientId, { dimensionCode: 'GLOBAL', windowType: 'DAILY_CALENDAR', thresholdAmount: 1000000 });
     await harness.configCache.warm([clientId]);
 
-    await harness.transactionService.submit(clientId, { transactionId: 'AUD-5', amount: 10 }, 'UTC');
-    const doc = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId, transactionId: 'AUD-5' } });
+    await harness.transactionService.submit(clientId, { direction: 'OUTWARD', transactionId: 'AUD-5', amount: 10 }, 'UTC', ['OUTWARD']);
+    const doc = await db.collection(TRANSACTIONS_COLLECTION).findOne({ _id: { clientId, direction: 'OUTWARD', transactionId: 'AUD-5' } });
     assert.equal(doc.windowState, 'WARMING');
     assert.equal(doc.appliedCounterKeys[0].warming, true);
   });
@@ -187,8 +187,8 @@ describe('Client timezone windows — STORY-04-06 (integration, real MongoDB)', 
 
     await harness.configCache.warm(['CLIENT_TZ_IN', 'CLIENT_TZ_US']);
 
-    await harness.transactionService.submit('CLIENT_TZ_IN', { transactionId: 'TZ-1', amount: 10 }, 'Asia/Kolkata', now);
-    await harness.transactionService.submit('CLIENT_TZ_US', { transactionId: 'TZ-2', amount: 10 }, 'America/Los_Angeles', now);
+    await harness.transactionService.submit('CLIENT_TZ_IN', { direction: 'OUTWARD', transactionId: 'TZ-1', amount: 10 }, 'Asia/Kolkata', ['OUTWARD'], now);
+    await harness.transactionService.submit('CLIENT_TZ_US', { direction: 'OUTWARD', transactionId: 'TZ-2', amount: 10 }, 'America/Los_Angeles', ['OUTWARD'], now);
 
     const inCounters = await db.collection(COUNTERS_COLLECTION).find({ clientId: 'CLIENT_TZ_IN' }).toArray();
     const usCounters = await db.collection(COUNTERS_COLLECTION).find({ clientId: 'CLIENT_TZ_US' }).toArray();

@@ -56,7 +56,7 @@ function buildService() {
 describe('RegistryService.replaceRegistry — STORY-02-01', () => {
   test('creates version 1 on first save and writes a REGISTRY_CREATED audit entry', async () => {
     const { service, limitsAuditRepository } = buildService();
-    const doc = await service.replaceRegistry('CLIENT_A', VALID_DIMENSIONS, 'admin-1');
+    const doc = await service.replaceRegistry('CLIENT_A', 'OUTWARD', VALID_DIMENSIONS, 'admin-1');
     assert.equal(doc.configVersion, 1);
     assert.equal(limitsAuditRepository.entries[0].action, 'REGISTRY_CREATED');
     assert.equal(limitsAuditRepository.entries[0].before, null);
@@ -64,18 +64,18 @@ describe('RegistryService.replaceRegistry — STORY-02-01', () => {
 
   test('AC4: a subsequent valid replace increments configVersion and swaps atomically (single set call)', async () => {
     const { service, registryRepository } = buildService();
-    await service.replaceRegistry('CLIENT_A', VALID_DIMENSIONS, 'admin-1');
-    const doc2 = await service.replaceRegistry('CLIENT_A', VALID_DIMENSIONS, 'admin-1');
+    await service.replaceRegistry('CLIENT_A', 'OUTWARD', VALID_DIMENSIONS, 'admin-1');
+    const doc2 = await service.replaceRegistry('CLIENT_A', 'OUTWARD', VALID_DIMENSIONS, 'admin-1');
     assert.equal(doc2.configVersion, 2);
     assert.equal(registryRepository.replaceCalls, 2);
   });
 
   test('AC2: an invalid registry is rejected and the previously loaded snapshot stays in force', async () => {
     const { service, registryRepository } = buildService();
-    await service.replaceRegistry('CLIENT_A', VALID_DIMENSIONS, 'admin-1');
+    await service.replaceRegistry('CLIENT_A', 'OUTWARD', VALID_DIMENSIONS, 'admin-1');
 
     await assert.rejects(
-      () => service.replaceRegistry('CLIENT_A', [{ code: 'UCIC', attributes: ['ucic'], windows: ['DAILY_CALENDAR'] }], 'admin-1'),
+      () => service.replaceRegistry('CLIENT_A', 'OUTWARD', [{ code: 'UCIC', attributes: ['ucic'], windows: ['DAILY_CALENDAR'] }], 'admin-1'),
       AppError,
     );
 
@@ -86,9 +86,9 @@ describe('RegistryService.replaceRegistry — STORY-02-01', () => {
 
   test('AC5: client A registry change does not affect client B', async () => {
     const { service, registryRepository } = buildService();
-    await service.replaceRegistry('CLIENT_A', VALID_DIMENSIONS, 'admin-1');
-    await service.replaceRegistry('CLIENT_B', VALID_DIMENSIONS, 'admin-1');
-    await service.replaceRegistry('CLIENT_A', VALID_DIMENSIONS, 'admin-1');
+    await service.replaceRegistry('CLIENT_A', 'OUTWARD', VALID_DIMENSIONS, 'admin-1');
+    await service.replaceRegistry('CLIENT_B', 'OUTWARD', VALID_DIMENSIONS, 'admin-1');
+    await service.replaceRegistry('CLIENT_A', 'OUTWARD', VALID_DIMENSIONS, 'admin-1');
 
     const b = await registryRepository.findByClientId('CLIENT_B');
     assert.equal(b.configVersion, 1);
@@ -96,7 +96,7 @@ describe('RegistryService.replaceRegistry — STORY-02-01', () => {
 
   test('pushes a cache refresh for the affected client after a successful write', async () => {
     const { service, configCache } = buildService();
-    await service.replaceRegistry('CLIENT_A', VALID_DIMENSIONS, 'admin-1');
+    await service.replaceRegistry('CLIENT_A', 'OUTWARD', VALID_DIMENSIONS, 'admin-1');
     assert.deepEqual(configCache.refreshedClientIds, ['CLIENT_A']);
   });
 });

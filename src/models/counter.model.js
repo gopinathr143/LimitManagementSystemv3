@@ -17,18 +17,21 @@ function assertSafeSegment(value, label) {
 }
 
 /**
- * BRD §4.2 — `limit:{clientId}:{dimensionCode}:{windowType}:{attrValue1}|{attrValue2}|...:{windowBucket}`.
- * The attribute segment is omitted entirely (not left empty) for a
- * zero-attribute dimension like GLOBAL — matches the BRD's own examples:
- * `limit:CLIENT_A:UCIC:DAILY_CALENDAR:U12345:2026-08-10` vs
- * `limit:CLIENT_A:GLOBAL:DAILY_CALENDAR:2026-08-10#7`.
+ * BRD §4.2 — `limit:{clientId}:{direction}:{dimensionCode}:{windowType}:{attrValue1}|{attrValue2}|...:{windowBucket}`.
+ * STORY-08-02 AC2 — the direction segment sits immediately after clientId so
+ * a client's counters remain contiguous by direction. The attribute segment
+ * is omitted entirely (not left empty) for a zero-attribute dimension like
+ * GLOBAL — matches the BRD's own examples:
+ * `limit:CLIENT_A:OUTWARD:UCIC:DAILY_CALENDAR:U12345:2026-08-10` vs
+ * `limit:CLIENT_A:OUTWARD:GLOBAL:DAILY_CALENDAR:2026-08-10#7`.
  */
-function buildBaseSegments({ clientId, dimensionCode, windowType, attributeValues }) {
+function buildBaseSegments({ clientId, direction, dimensionCode, windowType, attributeValues }) {
   assertSafeSegment(clientId, 'clientId');
+  assertSafeSegment(direction, 'direction');
   assertSafeSegment(dimensionCode, 'dimensionCode');
   assertSafeSegment(windowType, 'windowType');
 
-  const segments = [KEY_PREFIX, clientId, dimensionCode, windowType];
+  const segments = [KEY_PREFIX, clientId, direction, dimensionCode, windowType];
   if (attributeValues.length > 0) {
     attributeValues.forEach((value, i) => assertSafeSegment(String(value), `attributeValues[${i}]`));
     segments.push(attributeValues.map(String).join('|'));
@@ -36,21 +39,21 @@ function buildBaseSegments({ clientId, dimensionCode, windowType, attributeValue
   return segments;
 }
 
-/** STORY-03-01 — deterministic key for a calendar-day or monthly bucketed counter (Tier 0/1/2, non-rolling). */
-export function buildCounterKey({ clientId, dimensionCode, windowType, attributeValues = [], windowBucket, shardIndex }) {
+/** STORY-03-01 — deterministic key for a calendar-day or monthly bucketed counter (Tier 0/1/2, non-rolling). `direction` is the transaction's direction, or the COMBINED-dimension neutral segment (STORY-08-04, not yet built). */
+export function buildCounterKey({ clientId, direction, dimensionCode, windowType, attributeValues = [], windowBucket, shardIndex }) {
   if (windowType === WINDOW_TYPE.DAILY_ROLLING) {
     throw new Error('buildCounterKey does not handle DAILY_ROLLING — use buildRollingKey.');
   }
   assertSafeSegment(windowBucket, 'windowBucket');
-  const segments = buildBaseSegments({ clientId, dimensionCode, windowType, attributeValues });
+  const segments = buildBaseSegments({ clientId, direction, dimensionCode, windowType, attributeValues });
   segments.push(windowBucket);
   const key = segments.join(':');
   return shardIndex === undefined ? key : `${key}#${shardIndex}`;
 }
 
 /** BRD §4.2.5 — the rolling window is a single per-entity document, not bucketed by calendar window, so there is no windowBucket segment. */
-export function buildRollingKey({ clientId, dimensionCode, attributeValues = [], shardIndex }) {
-  const segments = buildBaseSegments({ clientId, dimensionCode, windowType: WINDOW_TYPE.DAILY_ROLLING, attributeValues });
+export function buildRollingKey({ clientId, direction, dimensionCode, attributeValues = [], shardIndex }) {
+  const segments = buildBaseSegments({ clientId, direction, dimensionCode, windowType: WINDOW_TYPE.DAILY_ROLLING, attributeValues });
   const key = segments.join(':');
   return shardIndex === undefined ? key : `${key}#${shardIndex}`;
 }

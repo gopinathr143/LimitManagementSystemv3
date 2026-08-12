@@ -1,12 +1,23 @@
 import { AppError } from '../utils/AppError.js';
 import { isValidIanaTimezone } from '../utils/timezone.js';
-import { CLIENT_STATUS } from '../constants/index.js';
+import { CLIENT_STATUS, ALL_DIRECTIONS, DIRECTION } from '../constants/index.js';
 
 export const CLIENTS_COLLECTION = 'clients';
 
 const CLIENT_ID_PATTERN = /^[A-Z0-9_]{3,64}$/;
 
-/** STORY-01-01 AC4 — invalid IANA timezone must be rejected and the offending field named. */
+function validateEnabledDirections(value, errors) {
+  if (value === undefined) {
+    return [DIRECTION.OUTWARD];
+  }
+  if (!Array.isArray(value) || value.length === 0 || !value.every((d) => ALL_DIRECTIONS.includes(d))) {
+    errors.push({ field: 'enabledDirections', message: `enabledDirections must be a non-empty array drawn from ${ALL_DIRECTIONS.join(', ')}.` });
+    return [];
+  }
+  return [...new Set(value)];
+}
+
+/** STORY-01-01 AC4 — invalid IANA timezone must be rejected and the offending field named. BRD §5 — "only OUTWARD exists" today, so a new client defaults to OUTWARD-only unless explicitly given a wider set. */
 export function validateClientCreatePayload(payload) {
   const errors = [];
 
@@ -19,10 +30,13 @@ export function validateClientCreatePayload(payload) {
   if (!isValidIanaTimezone(payload?.timezone)) {
     errors.push({ field: 'timezone', message: `timezone must be a valid IANA timezone name, got: ${payload?.timezone}` });
   }
+  const enabledDirections = validateEnabledDirections(payload?.enabledDirections, errors);
 
   if (errors.length > 0) {
     throw AppError.badRequest('Client payload failed validation.', 'VALIDATION_ERROR', { errors });
   }
+
+  return { enabledDirections };
 }
 
 export function validateClientUpdatePayload(payload) {
@@ -46,13 +60,14 @@ export function validateClientUpdatePayload(payload) {
   }
 }
 
-export function buildClientDocument({ clientId, name, timezone, createdBy, now }) {
+export function buildClientDocument({ clientId, name, timezone, enabledDirections, createdBy, now }) {
   return {
     _id: clientId,
     clientId,
     name,
     status: CLIENT_STATUS.ACTIVE,
     timezone,
+    enabledDirections: enabledDirections ?? [DIRECTION.OUTWARD],
     createdBy,
     createdAt: now,
     updatedAt: now,
