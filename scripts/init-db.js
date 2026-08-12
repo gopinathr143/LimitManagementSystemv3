@@ -250,7 +250,10 @@ export async function initDb(client, dbName = env.mongo.dbName) {
 }
 
 async function main() {
-  const client = new MongoClient(env.mongo.uri);
+  // Mirrors src/config/database.js's auth handling — this is what the
+  // production migration Job (deploy/k8s/migration) actually runs.
+  const options = env.mongo.username ? { auth: { username: env.mongo.username, password: env.mongo.password } } : {};
+  const client = new MongoClient(env.mongo.uri, options);
   try {
     await client.connect();
     await initDb(client);

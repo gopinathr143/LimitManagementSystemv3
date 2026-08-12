@@ -1,0 +1,8 @@
+# Real staging replica-set member hosts go here (comma-separated host:port,
+# no scheme, no credentials — see deploy/k8s/base/configmap.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: imps-velocity-config
+data:
+  MONGO_HOSTS: "REPLACE_ME_STAGING_HOST1:27017,REPLACE_ME_STAGING_HOST2:27017,REPLACE_ME_STAGING_HOST3:27017"
