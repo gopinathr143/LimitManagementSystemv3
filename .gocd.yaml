@@ -1,0 +1,209 @@
+# GoCD Pipelines-as-Code definition (tomzo/gocd-yaml-config-plugin format).
+# Requires the GoCD server to have that plugin installed and a Config Repository
+# pointed at this repo's root — see Docs/DEPLOYMENT.md "GoCD setup" for the
+# one-time server-side steps (adding the config repo, agent resource tags,
+# environments, secret config).
+#
+# Prerequisites this file assumes (documented, not provisioned by this file):
+#   - Classic GoCD agents tagged with resources: `docker`, `k8s-deploy`
+#     (the latter has kubectl >= 1.27 with built-in kustomize, and a kubeconfig
+#     already scoped to the right cluster/context per GoCD Environment — see
+#     Docs/DEPLOYMENT.md "GoCD setup").
+#   - A GoCD secret config (id: imps-velocity-secrets) providing
+#     REGISTRY_USER / REGISTRY_PASSWORD, referenced below via the
+#     `{{SECRET:[...]}}` syntax — nothing secret is inlined in this file.
+#   - DOCKER_REGISTRY set as a pipeline environment variable (e.g.
+#     `123456789.dkr.ecr.ap-south-1.amazonaws.com` or `docker.io/yourorg`).
+format_version: 10
+pipelines:
+  imps-velocity-system:
+    group: imps-velocity
+    label_template: "${COUNT}-${git[:8]}"
+    materials:
+      git:
+        git: git@github.com:gopinathr143/LimitManagementSystemv3.git
+        branch: main
+        shallow_clone: true
+    environment_variables:
+      DOCKER_REGISTRY: "REPLACE_ME_REGISTRY_HOST"
+      IMAGE_NAME: "imps-velocity-system"
+      REGISTRY_USER: "{{SECRET:[imps-velocity-secrets][registry_user]}}"
+      REGISTRY_PASSWORD: "{{SECRET:[imps-velocity-secrets][registry_password]}}"
+    stages:
+      # --- Stage 1: install, lint, unit + integration tests against a real MongoDB replica set ---
+      # Mirrors local dev exactly (docker-compose.yml, scripts/wait-for-mongo.js,
+      # scripts/init-db.js) — this project's own stated policy is "never mocks."
+      # tests:integration:slow (throughput/hot-counter certification, ~45s incl.
+      # a real TTL wait) is deliberately NOT run here — see the nightly
+      # `imps-velocity-system-certification` pipeline below.
+      - test:
+          clean_workspace: true
+          jobs:
+            unit_and_integration:
+              timeout: 20
+              resources:
+                - docker
+              tasks:
+                - exec:
+                    command: bash
+                    arguments:
+                      - -c
+                      - corepack enable && yarn install --immutable
+                - exec:
+                    command: bash
+                    arguments: [-c, "yarn lint"]
+                - exec:
+                    command: bash
+                    arguments: [-c, "yarn mongo:up"]
+                - exec:
+                    command: bash
+                    arguments: [-c, "yarn db:init"]
+                - exec:
+                    command: bash
+                    arguments: [-c, "yarn test:all"]
+                # Always tears the compose stack down, pass or fail, so a failed
+                # run doesn't leak a container on the agent.
+                - exec:
+                    command: bash
+                    arguments: [-c, "yarn mongo:down"]
+                    run_if: [passed, failed]
+
+      # --- Stage 2: build the image once, deploy the identical artifact everywhere after ---
+      - build_image:
+          clean_workspace: true
+          jobs:
+            docker_build_and_push:
+              timeout: 15
+              resources:
+                - docker
+              tasks:
+                - exec:
+                    command: bash
+                    arguments:
+                      - -c
+                      - |
+                        set -euo pipefail
+                        docker build -t "${DOCKER_REGISTRY}/${IMAGE_NAME}:${GO_PIPELINE_LABEL}" .
+                - exec:
+                    command: bash
+                    arguments:
+                      - -c
+                      - |
+                        set -euo pipefail
+                        echo "${REGISTRY_PASSWORD}" | docker login "${DOCKER_REGISTRY}" -u "${REGISTRY_USER}" --password-stdin
+                        docker push "${DOCKER_REGISTRY}/${IMAGE_NAME}:${GO_PIPELINE_LABEL}"
+
+      # --- Stage 3: staging — automatic, every green build ---
+      - deploy_staging:
+          clean_workspace: true
+          jobs:
+            deploy:
+              timeout: 15
+              resources:
+                - k8s-deploy
+              tasks:
+                # Migration Job first, and waited-on, so no app pod ever starts
+                # against a schema it doesn't expect (see deploy/k8s/migration/base/job.yaml).
+                - exec:
+                    command: bash
+                    arguments:
+                      - -c
+                      - |
+                        set -euo pipefail
+                        cd deploy/k8s/migration/base
+                        kustomize edit set image "imps-velocity-system=${DOCKER_REGISTRY}/${IMAGE_NAME}:${GO_PIPELINE_LABEL}"
+                        cd ../overlays/staging
+                        kubectl delete job/imps-velocity-migration -n imps-velocity-staging --ignore-not-found
+                        kubectl apply -k .
+                        kubectl wait --for=condition=complete job/imps-velocity-migration -n imps-velocity-staging --timeout=120s
+                - exec:
+                    command: bash
+                    arguments:
+                      - -c
+                      - |
+                        set -euo pipefail
+                        cd deploy/k8s/base
+                        kustomize edit set image "imps-velocity-system=${DOCKER_REGISTRY}/${IMAGE_NAME}:${GO_PIPELINE_LABEL}"
+                        cd ../overlays/staging
+                        kubectl apply -k .
+                        kubectl rollout status deployment/imps-velocity-system -n imps-velocity-staging --timeout=180s
+
+      # --- Stage 4: production — manual gate, same artifact promoted, never rebuilt ---
+      - deploy_production:
+          clean_workspace: true
+          approval:
+            type: manual
+            allow_only_on_success: true
+          jobs:
+            deploy:
+              timeout: 15
+              resources:
+                - k8s-deploy
+              tasks:
+                - exec:
+                    command: bash
+                    arguments:
+                      - -c
+                      - |
+                        set -euo pipefail
+                        cd deploy/k8s/migration/base
+                        kustomize edit set image "imps-velocity-system=${DOCKER_REGISTRY}/${IMAGE_NAME}:${GO_PIPELINE_LABEL}"
+                        cd ../overlays/production
+                        kubectl delete job/imps-velocity-migration -n imps-velocity --ignore-not-found
+                        kubectl apply -k .
+                        kubectl wait --for=condition=complete job/imps-velocity-migration -n imps-velocity --timeout=120s
+                - exec:
+                    command: bash
+                    arguments:
+                      - -c
+                      - |
+                        set -euo pipefail
+                        cd deploy/k8s/base
+                        kustomize edit set image "imps-velocity-system=${DOCKER_REGISTRY}/${IMAGE_NAME}:${GO_PIPELINE_LABEL}"
+                        cd ../overlays/production
+                        kubectl apply -k .
+                        kubectl rollout status deployment/imps-velocity-system -n imps-velocity --timeout=180s
+
+  # Separate pipeline so a slow (~45s, incl. a real TTL wait), infra-hungry
+  # certification run never blocks or slows down every commit's feedback loop.
+  # Trigger this on a timer (GoCD "timer" material) or manually — not wired to
+  # `imps-velocity-system` above. See STORY-07-01/07-02 for what these prove
+  # and, just as importantly, what they honestly do NOT certify (this session's
+  # own single-node measurements are not a substitute for a real sized
+  # load-test environment).
+  imps-velocity-system-certification:
+    group: imps-velocity
+    label_template: "${COUNT}"
+    materials:
+      git:
+        git: git@github.com:gopinathr143/LimitManagementSystemv3.git
+        branch: main
+        shallow_clone: true
+    timer:
+      spec: "0 0 2 * * ?"
+      only_on_changes: false
+    stages:
+      - certify:
+          clean_workspace: true
+          jobs:
+            slow_suite:
+              timeout: 20
+              resources:
+                - docker
+              tasks:
+                - exec:
+                    command: bash
+                    arguments: [-c, "corepack enable && yarn install --immutable"]
+                - exec:
+                    command: bash
+                    arguments: [-c, "yarn mongo:up"]
+                - exec:
+                    command: bash
+                    arguments: [-c, "yarn db:init"]
+                - exec:
+                    command: bash
+                    arguments: [-c, "yarn test:integration:slow"]
+                - exec:
+                    command: bash
+                    arguments: [-c, "yarn mongo:down"]
+                    run_if: [passed, failed]

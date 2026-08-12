@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: imps-velocity
+resources:
+  - ../../base
+# Replica count, resources and autoscaling bounds all come from base as-is —
+# tune only once real staging load-test numbers exist (Docs/DEPLOYMENT.md
+# "Required resources"). Image tag is set at deploy time by the GoCD stage:
+#   kustomize edit set image imps-velocity-system=<registry>/imps-velocity-system:<tag>
+# (run from this directory, immediately before `kustomize build | kubectl apply -f -`).

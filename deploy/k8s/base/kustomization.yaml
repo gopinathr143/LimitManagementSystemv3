@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - pdb.yaml
+  - hpa.yaml
+# secret.example.yaml is deliberately NOT listed — the real Secret is applied
+# out-of-band per environment (see Docs/DEPLOYMENT.md "Secrets").
