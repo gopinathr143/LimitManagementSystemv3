@@ -30,18 +30,15 @@ mongo-up:
 mongo-down:
 	yarn mongo:down
 
-## db-init: apply collection validators/indexes to the running MongoDB (idempotent; hand-mirrors db/changelog — see scripts/init-db.js)
+## db-init: fast local/test-suite bootstrap (idempotent; hand-mirrors db/changelog — see scripts/init-db.js). Real deployments use `make migrate` instead.
 db-init:
 	yarn db:init
 
-## migrate: run the Liquibase changelog (db/changelog/db.changelog-master.xml) against MONGO_URI
-# Requires the `liquibase` CLI (with the MongoDB extension) on PATH — not
-# installed in this project's dev/CI environments to date; `make db-init`
-# is the proven stand-in used by local dev and every test suite instead.
+## migrate: build and run the real db/changelog (Liquibase, via Docker — no local CLI needed) against MongoDB — see deploy/liquibase/README.md
 migrate:
 	yarn migrate
 
-## migrate-status: show pending Liquibase changesets without applying them
+## migrate-status: same as migrate, but only shows pending changesets without applying them
 migrate-status:
 	yarn migrate:status
 

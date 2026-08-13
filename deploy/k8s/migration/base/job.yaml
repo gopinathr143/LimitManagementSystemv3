@@ -1,17 +1,19 @@
-# Runs the schema/index bootstrap before a deploy rolls out. Uses the same
-# application image (scripts/init-db.js is bundled into it) rather than the
-# `liquibase` CLI, because db/changelog/*.xml is this project's source of
-# truth but no environment in this project's history has had the Liquibase
-# CLI installed to actually run it — scripts/init-db.js is the hand-mirrored
-# stand-in the whole test suite already depends on (see that script's own
-# header comment). If Liquibase is provisioned in your target environment,
-# prefer `yarn migrate` (db/liquibase.properties) instead and swap the
-# command below — either way, run this BEFORE the Deployment rollout, not
-# after, so a new pod never starts against a schema it doesn't expect.
+# Runs the schema/index bootstrap before a deploy rolls out — real Liquibase
+# (db/changelog/*.xml, this project's source of truth), via the
+# self-contained image built from deploy/liquibase/Dockerfile. Run this
+# BEFORE the Deployment rollout, not after, so a new app pod never starts
+# against a schema it doesn't expect.
 #
-# Idempotent: `ensureCollection` in scripts/init-db.js uses createCollection
-# on first run and collMod thereafter, so re-running this Job on every
-# deploy (including when nothing changed) is safe.
+# The app image is NOT used here anymore — this Job runs the dedicated
+# Liquibase image instead (deploy/liquibase/README.md). scripts/init-db.js
+# (still bundled in the app image) remains the test suite's own fast,
+# no-Docker-dependency bootstrap; it is not this Job's mechanism.
+#
+# Idempotent: a changeset Liquibase has already recorded as run (tracked in
+# the DATABASECHANGELOG collection this image creates) is skipped on
+# re-apply — safe to run this Job on every deploy, including when nothing
+# changed (verified in this session: a second `update` run reports
+# "Run: 0, Previously run: 23").
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -26,9 +28,13 @@ spec:
       containers:
         - name: migrate
           # Placeholder — set at deploy time via `kustomize edit set image` (see
-          # deploy/k8s/migration/kustomization.yaml and .gocd.yaml).
-          image: imps-velocity-system:build-me
-          command: ["node", "scripts/init-db.js"]
+          # deploy/k8s/migration/base/kustomization.yaml and .gocd.yaml). This is
+          # the imps-liquibase-migration image (deploy/liquibase/Dockerfile), a
+          # separate image from the app's own — not imps-velocity-system.
+          image: imps-liquibase-migration:build-me
+          # CMD in the image already defaults to "update" — explicit here for
+          # clarity and so this Job's intent doesn't depend on reading the Dockerfile.
+          args: ["update"]
           envFrom:
             - configMapRef:
                 name: imps-velocity-config
@@ -36,8 +42,8 @@ spec:
                 name: imps-velocity-mongo-credentials
           resources:
             requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "500m"
+              cpu: "250m"
               memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"

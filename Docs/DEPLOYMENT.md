@@ -76,10 +76,12 @@ deploy/k8s/
 │   ├── staging/              # namespace=imps-velocity-staging, replicas=1, LOG_LEVEL=debug, tighter HPA bounds
 │   └── production/            # namespace=imps-velocity, base values as-is
 ├── migration/
-│   ├── base/                 # the schema/index bootstrap Job
+│   ├── base/                 # the schema/index bootstrap Job — runs the real Liquibase image, see deploy/liquibase/
 │   └── overlays/{staging,production}/
 └── base/secret.example.yaml  # TEMPLATE ONLY — not applied by kustomize, never commit a filled-in copy
 ```
+
+The migration Job runs `deploy/liquibase/`'s image, not the app image — a separate, dedicated container that packages Liquibase + the MongoDB extension + `db/changelog` (this project's real source of truth) so migrations run identically in any environment with no `liquibase` CLI installed anywhere. See `deploy/liquibase/README.md` for the full detail (build args to point at a private-registry base image, version pinning, why it's a self-contained image at all). `scripts/init-db.js` still exists and still runs — it's the test suite's own fast, no-Docker-dependency bootstrap for ephemeral per-test-file databases (`tests/integration/helpers/setup.js`), a different concern from this Job.
 
 **Verified in this session:** all six kustomize builds (`base`, both app overlays, migration `base`, both migration overlays) render with `kubectl kustomize` with no errors, and the staging overlay was applied for real to a local Kubernetes API server (Colima/k3s) — the Namespace, ConfigMap, Service, Deployment, PodDisruptionBudget and HorizontalPodAutoscaler were all created correctly and scoped to the right namespace by the `namespace:` transformer. With no Secret present (as expected — Secrets are deliberately not part of the kustomize tree), the pod correctly sat in `CreateContainerConfigError` rather than crash-looping or starting half-configured — the same fail-closed posture the application code itself follows.
 
@@ -96,13 +98,71 @@ Either way, **the `imps-velocity-system` GoCD pipeline never sees or handles the
 
 See §9 — these values need real staging load-test numbers before they're anything more than a sane starting point.
 
+### Database migrations (Liquibase)
+
+`db/changelog/*.xml` is this project's real source of truth for the MongoDB
+schema (collection validators, indexes) — but for most of this project's
+history nothing could actually run it: no environment had the Liquibase CLI
+installed. `deploy/liquibase/` closes that gap with a self-contained image
+(Liquibase + the OSS MongoDB extension + `db/changelog` baked in), so
+migrations run identically anywhere via `docker run` — no CLI install, no
+repo checkout alongside it. Full detail in `deploy/liquibase/README.md`
+(build args, exact extension/driver versions and their pinned checksums,
+why the base image is a build ARG). In short:
+
+- **Local dev:** `make migrate` / `make migrate-status` (also `yarn migrate` /
+  `yarn migrate:status` — the Makefile targets are thin wrappers around the
+  same `scripts/migrate.sh`, matching every other target in this Makefile).
+  Builds the image and runs it against `make mongo-up`'s replica set by
+  default; override `MONGO_HOSTS`/`MONGO_USERNAME`/`MONGO_PASSWORD`/etc. (or
+  `MONGO_URI`) to target anything else.
+- **Kubernetes:** the migration Job (`deploy/k8s/migration/`) runs this
+  image, not the app image — see §6 step 5 and §7's `build_image` stage.
+- **Your own private-registry image:** `LIQUIBASE_BASE_IMAGE` is a build ARG
+  (default: the public `liquibase/liquibase` image) — point it at your own
+  pre-built Liquibase+MongoDB-extension image instead, e.g.
+  `docker build -f deploy/liquibase/Dockerfile --build-arg LIQUIBASE_BASE_IMAGE=your-registry.example.com/liquibase_mongo_migration:1.2.3 ...`.
+  If that image already bundles the MongoDB extension, this Dockerfile's own
+  copy of the extension jars just sits alongside it — harmless redundancy,
+  not a conflict.
+
+**Verified in this session, against a real MongoDB replica set:** `status`
+correctly lists all 23 pending changesets on a fresh database; `update`
+applies all 23 and produces collection validators and indexes byte-identical
+in shape to what `scripts/init-db.js` produces (same required fields, same
+`enabledDirections` description text, same index keys); re-running `update`
+is a genuine no-op (`Run: 0, Previously run: 23`); the discrete-credentials
+path was tested against a real MongoDB user whose password contained
+`@ / : #` (specifically chosen to break naive URL concatenation) and
+authenticated correctly; a wrong password fails closed with a real
+`MongoServerError`/exit code 1, not a silent fallback. The `LIQUIBASE_BASE_IMAGE`
+override was proven to genuinely swap the base image (built with an alternate
+public tag and confirmed the resulting image reports that version) — the
+private-registry path itself was not tested against an actual private
+registry (none exists in this session), only the build-arg mechanism that
+makes it possible.
+
+`scripts/init-db.js` is **not retired** — it remains the integration test
+suite's own fast, no-Docker-dependency bootstrap for each test file's
+ephemeral database (`tests/integration/helpers/setup.js`); replacing that
+with a full Liquibase container per test file would be a real regression
+there. It is simply no longer what real deployments use.
+
 ## 6. Manual deployment (no GoCD — first bring-up, or a human doing it directly)
 
 1. **Provision MongoDB** — a real replica set reachable from the cluster (see §9 for sizing). Confirm the shard key recommendation from `Docs/stories/STORY-06-01-...md` (`{clientId: 1, claimedAt: 1}`) is applied if/when the `transactions` collection is sharded. Create an application database user scoped to `imps_velocity` (not an admin-level account).
-2. **Build and push the image:**
+2. **Build and push both images** — the app, and the Liquibase migration image:
    ```bash
    docker build -t <registry>/imps-velocity-system:<tag> .
    docker push <registry>/imps-velocity-system:<tag>
+
+   docker build -f deploy/liquibase/Dockerfile -t <registry>/imps-liquibase-migration:<tag> .
+   # Or, pointing at your own pre-built Liquibase+MongoDB-extension image instead
+   # of the public liquibase/liquibase default — see deploy/liquibase/README.md:
+   #   docker build -f deploy/liquibase/Dockerfile \
+   #     --build-arg LIQUIBASE_BASE_IMAGE=your-registry.example.com/liquibase_mongo_migration:1.2.3 \
+   #     -t <registry>/imps-liquibase-migration:<tag> .
+   docker push <registry>/imps-liquibase-migration:<tag>
    ```
 3. **Set the real replica-set hosts** for the target environment — edit `deploy/k8s/overlays/staging/mongo-hosts-patch.yaml` (or `overlays/production/...`) and replace its `REPLACE_ME_*` placeholders with your actual AWS member hosts; do the same for `MONGO_USERNAME` in `deploy/k8s/base/configmap.yaml` if it differs from the `imps_velocity_app` placeholder. Both are ordinary, non-secret config — commit the real hosts/username.
 4. **Create the namespace and Secret** for the target environment (`imps-velocity-staging` or `imps-velocity`) — **password only**, nothing else:
@@ -112,10 +172,10 @@ See §9 — these values need real staging load-test numbers before they're anyt
      --from-literal=MONGO_PASSWORD='<the application user'"'"'s password>' \
      -n imps-velocity-staging
    ```
-5. **Run the migration Job** (schema/index bootstrap — idempotent, safe to re-run):
+5. **Run the migration Job** (real Liquibase, real `db/changelog` — idempotent, safe to re-run; verified in this session: a second `update` run reports "Run: 0, Previously run: 23"):
    ```bash
    cd deploy/k8s/migration/base
-   kustomize edit set image imps-velocity-system=<registry>/imps-velocity-system:<tag>   # or: kubectl kustomize... | sed, if you don't have the `kustomize` binary — kubectl's built-in kustomize doesn't expose `edit`, so this one step needs the standalone kustomize CLI, or hand-edit the image line
+   kustomize edit set image imps-liquibase-migration=<registry>/imps-liquibase-migration:<tag>   # or: kubectl kustomize... | sed, if you don't have the `kustomize` binary — kubectl's built-in kustomize doesn't expose `edit`, so this one step needs the standalone kustomize CLI, or hand-edit the image line
    cd ../overlays/staging
    kubectl delete job/imps-velocity-migration -n imps-velocity-staging --ignore-not-found
    kubectl apply -k .
@@ -163,7 +223,7 @@ Repeat against `overlays/production` for a production rollout (same steps, diffe
 | Stage | Trigger | What it does |
 | :--- | :--- | :--- |
 | `test` | Every commit to `main` | `yarn install --immutable`, `yarn lint`, brings up the same `docker-compose` MongoDB replica set local dev uses, `yarn db:init`, `yarn test:all` (unit + integration — 143 + 113 tests as of EPIC-08). Tears the compose stack down unconditionally (`run_if: [passed, failed]`) so a failed run never leaks a container on the agent. |
-| `build_image` | On `test` success | Builds the image once (`docker build`), tags it `${GO_PIPELINE_LABEL}` (monotonic, traceable to the exact commit via `label_template`), pushes to `DOCKER_REGISTRY`. |
+| `build_image` | On `test` success | Builds **both** images once — the app and `deploy/liquibase/`'s migration image — tags each `${GO_PIPELINE_LABEL}` (monotonic, traceable to the exact commit via `label_template`), pushes both to `DOCKER_REGISTRY`. |
 | `deploy_staging` | Automatic, on `build_image` success | Runs the migration Job (delete-then-apply-then-wait, so it's never stale from a prior run), then `kubectl apply -k` the `staging` overlay, then waits on rollout status. |
 | `deploy_production` | **Manual approval gate** (`approval: type: manual`) | Identical steps, targeting the `production` overlay. Promotes the exact image `deploy_staging` already ran — this pipeline never rebuilds for production. |
 
@@ -237,3 +297,4 @@ Whether the 1,000 RPS target is per-direction or combined is an **open business/
 | HPA is CPU-based, not a direct proxy for this service's real bottleneck | §9 above |
 | No image vulnerability scanning wired into the pipeline yet (a `trivy image` or `docker scout` step is a reasonable, low-effort addition to the `build_image` stage) | this document — a recommendation, not yet built |
 | This `.gocd.yaml` has not been run against a real GoCD server | §7 above |
+| `deploy/liquibase/`'s private-registry override (`LIQUIBASE_BASE_IMAGE`) was proven as a build-arg mechanism, but never tested against an actual private registry image (none exists in this session) | §5 "Database migrations" above |
