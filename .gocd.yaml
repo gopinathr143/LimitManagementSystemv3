@@ -14,6 +14,9 @@
 #     `{{SECRET:[...]}}` syntax — nothing secret is inlined in this file.
 #   - DOCKER_REGISTRY set as a pipeline environment variable (e.g.
 #     `123456789.dkr.ecr.ap-south-1.amazonaws.com` or `docker.io/yourorg`).
+#   - LIQUIBASE_BASE_IMAGE, if you have a pre-built Liquibase+MongoDB-extension
+#     image in your own private registry — defaults to the public
+#     liquibase/liquibase image otherwise. See deploy/liquibase/README.md.
 format_version: 10
 pipelines:
   imps-velocity-system:
@@ -27,6 +30,8 @@ pipelines:
     environment_variables:
       DOCKER_REGISTRY: "REPLACE_ME_REGISTRY_HOST"
       IMAGE_NAME: "imps-velocity-system"
+      LIQUIBASE_IMAGE_NAME: "imps-liquibase-migration"
+      LIQUIBASE_BASE_IMAGE: "liquibase/liquibase:5.0.3"
       REGISTRY_USER: "{{SECRET:[imps-velocity-secrets][registry_user]}}"
       REGISTRY_PASSWORD: "{{SECRET:[imps-velocity-secrets][registry_password]}}"
     stages:
@@ -68,7 +73,7 @@ pipelines:
                     arguments: [-c, "yarn mongo:down"]
                     run_if: [passed, failed]
 
-      # --- Stage 2: build the image once, deploy the identical artifact everywhere after ---
+      # --- Stage 2: build both images once, deploy the identical artifacts everywhere after ---
       - build_image:
           clean_workspace: true
           jobs:
@@ -84,6 +89,9 @@ pipelines:
                       - |
                         set -euo pipefail
                         docker build -t "${DOCKER_REGISTRY}/${IMAGE_NAME}:${GO_PIPELINE_LABEL}" .
+                        docker build -f deploy/liquibase/Dockerfile \
+                          --build-arg LIQUIBASE_BASE_IMAGE="${LIQUIBASE_BASE_IMAGE}" \
+                          -t "${DOCKER_REGISTRY}/${LIQUIBASE_IMAGE_NAME}:${GO_PIPELINE_LABEL}" .
                 - exec:
                     command: bash
                     arguments:
@@ -92,6 +100,7 @@ pipelines:
                         set -euo pipefail
                         echo "${REGISTRY_PASSWORD}" | docker login "${DOCKER_REGISTRY}" -u "${REGISTRY_USER}" --password-stdin
                         docker push "${DOCKER_REGISTRY}/${IMAGE_NAME}:${GO_PIPELINE_LABEL}"
+                        docker push "${DOCKER_REGISTRY}/${LIQUIBASE_IMAGE_NAME}:${GO_PIPELINE_LABEL}"
 
       # --- Stage 3: staging — automatic, every green build ---
       - deploy_staging:
@@ -111,7 +120,7 @@ pipelines:
                       - |
                         set -euo pipefail
                         cd deploy/k8s/migration/base
-                        kustomize edit set image "imps-velocity-system=${DOCKER_REGISTRY}/${IMAGE_NAME}:${GO_PIPELINE_LABEL}"
+                        kustomize edit set image "imps-liquibase-migration=${DOCKER_REGISTRY}/${LIQUIBASE_IMAGE_NAME}:${GO_PIPELINE_LABEL}"
                         cd ../overlays/staging
                         kubectl delete job/imps-velocity-migration -n imps-velocity-staging --ignore-not-found
                         kubectl apply -k .
@@ -147,7 +156,7 @@ pipelines:
                       - |
                         set -euo pipefail
                         cd deploy/k8s/migration/base
-                        kustomize edit set image "imps-velocity-system=${DOCKER_REGISTRY}/${IMAGE_NAME}:${GO_PIPELINE_LABEL}"
+                        kustomize edit set image "imps-liquibase-migration=${DOCKER_REGISTRY}/${LIQUIBASE_IMAGE_NAME}:${GO_PIPELINE_LABEL}"
                         cd ../overlays/production
                         kubectl delete job/imps-velocity-migration -n imps-velocity --ignore-not-found
                         kubectl apply -k .

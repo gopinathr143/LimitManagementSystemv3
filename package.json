@@ -19,8 +19,8 @@
     "mongo:up": "docker-compose up -d mongo && node scripts/wait-for-mongo.js",
     "mongo:down": "docker-compose down -v",
     "db:init": "node scripts/init-db.js",
-    "migrate": "liquibase --defaultsFile=db/liquibase.properties update",
-    "migrate:status": "liquibase --defaultsFile=db/liquibase.properties status",
+    "migrate": "bash scripts/migrate.sh update",
+    "migrate:status": "bash scripts/migrate.sh status",
     "lint": "node --check src/**/*.js"
   },
   "dependencies": {
