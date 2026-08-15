@@ -1,0 +1,462 @@
+{
+  "info": {
+    "_postman_id": "141b79c5-e2f3-41ce-aefe-b934900bde19",
+    "name": "IMPS Outward Velocity Limit System",
+    "description": "Multi-tenant, direction-scoped (OUTWARD/INWARD) velocity limit gate.\n\nNo authentication — clientId is taken directly from the URL path (see src/middleware/resolveClientId.middleware.js); its existence and ACTIVE status are still validated and fail closed. `actorHeader` is an optional, unverified caller-supplied identifier recorded on audit entries only.\n\nRequests are ordered top-to-bottom as a runnable end-to-end flow (use \"Run collection\"): onboard a client, declare its OUTWARD and INWARD dimension registries, create the mandatory GLOBAL Per-Transaction limits plus one more, submit an approved and a rejected OUTWARD transaction, check status, reverse it, enable INWARD, then submit an INWARD transaction.\n\nUse with the `local` environment (postman/local.postman_environment.json) against `node --env-file=local.env src/server.js` or `make dev`, with `make mongo-up` running. Verified end to end in this session with `newman run` — 0 failed assertions.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000", "type": "string" },
+    { "key": "actorHeader", "value": "x-actor-id", "type": "string" },
+    { "key": "actor", "value": "postman-user", "type": "string" },
+    { "key": "clientId", "value": "POSTMAN_DEMO", "type": "string" },
+    { "key": "limitId", "value": "", "type": "string" },
+    { "key": "disposableLimitId", "value": "", "type": "string" },
+    { "key": "outwardTransactionId", "value": "PM-OUT-1", "type": "string" },
+    { "key": "inwardTransactionId", "value": "PM-IN-1", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health & Metrics",
+      "item": [
+        {
+          "name": "Health check",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 UP', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().data.status).to.eql('UP'); });"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "Prometheus metrics",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/metrics", "host": ["{{baseUrl}}"], "path": ["metrics"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Clients (admin)",
+      "item": [
+        {
+          "name": "Create client",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201 Created, ACTIVE, defaults to OUTWARD-only', () => {", "  pm.response.to.have.status(201);", "  const client = pm.response.json().data.client;", "  pm.expect(client.clientId).to.eql(pm.collectionVariables.get('clientId'));", "  pm.expect(client.status).to.eql('ACTIVE');", "  pm.expect(client.enabledDirections).to.eql(['OUTWARD']);", "});"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "content-type", "value": "application/json" },
+              { "key": "{{actorHeader}}", "value": "{{actor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"{{clientId}}\",\n  \"name\": \"Postman Demo Client\",\n  \"timezone\": \"Asia/Kolkata\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clients", "host": ["{{baseUrl}}"], "path": ["clients"] },
+            "description": "enabledDirections defaults to [\"OUTWARD\"] if omitted. clientId must be 3-64 chars of A-Z, 0-9 or underscore."
+          }
+        },
+        {
+          "name": "List clients",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK, array includes our client', () => {", "  pm.response.to.have.status(200);", "  const ids = pm.response.json().data.map(c => c.clientId);", "  pm.expect(ids).to.include(pm.collectionVariables.get('clientId'));", "});"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients?limit=50&skip=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["clients"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "skip", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get client by clientId",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}"] }
+          }
+        },
+        {
+          "name": "Update client (name/timezone/status)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "content-type", "value": "application/json" },
+              { "key": "{{actorHeader}}", "value": "{{actor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"timezone\": \"Asia/Kolkata\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}"] },
+            "description": "At least one of status, timezone or name is required. status must be ACTIVE or SUSPENDED."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dimension Registry",
+      "item": [
+        {
+          "name": "Declare OUTWARD dimensions",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK, configVersion 1', () => {", "  pm.response.to.have.status(200);", "  pm.expect(pm.response.json().data.configVersion).to.eql(1);", "});"] } }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "content-type", "value": "application/json" },
+              { "key": "{{actorHeader}}", "value": "{{actor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"direction\": \"OUTWARD\",\n  \"allowedDimensions\": [\n    { \"code\": \"GLOBAL\", \"attributes\": [], \"hot\": true, \"shardFactor\": 8, \"windows\": { \"DAILY_CALENDAR\": { \"warming\": true } } },\n    { \"code\": \"UCIC\", \"attributes\": [\"ucic\"], \"windows\": { \"DAILY_CALENDAR\": { \"warming\": true } } },\n    { \"code\": \"UCIC_CHANNEL\", \"attributes\": [\"ucic\", \"channel\"], \"windows\": { \"DAILY_CALENDAR\": { \"warming\": true } } }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/dimensions", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "dimensions"] },
+            "description": "GLOBAL is mandatory in every direction's registry. attributes must be drawn from: channel, ucic, accountNumber, mcc. `windows` accepts a plain array of window-type names (shorthand) or the full map form ({WINDOW_TYPE: {granularity, shardFactor, warming}}) for DAILY_ROLLING/per-window overrides or the `warming: true` opt-in. A newly-declared window normally sits in PENDING_ACTIVATION until the next calendar boundary (STORY-02-03's cold-start protection) — `warming: true` is used here so the limits below are enforced immediately, which is what you want for manual testing/demos, not what you'd necessarily want rolling out a real new window to production traffic. This whole PUT replaces the OUTWARD registry atomically — invalid input leaves the previous snapshot in force."
+          }
+        },
+        {
+          "name": "Declare INWARD dimensions",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "content-type", "value": "application/json" },
+              { "key": "{{actorHeader}}", "value": "{{actor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"direction\": \"INWARD\",\n  \"allowedDimensions\": [\n    { \"code\": \"GLOBAL\", \"attributes\": [], \"windows\": { \"DAILY_CALENDAR\": { \"warming\": true } } }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/dimensions", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "dimensions"] },
+            "description": "A direction's registry can be authored and reviewed before that direction is enabled for the client — it's stored but ineffective (submissions still rejected with DIRECTION_NOT_ENABLED) until PATCH .../directions turns it on."
+          }
+        },
+        {
+          "name": "Get registry (all directions)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK, both directions present', () => {", "  pm.response.to.have.status(200);", "  const directions = pm.response.json().data.directions;", "  pm.expect(Object.keys(directions)).to.include.members(['OUTWARD', 'INWARD']);", "});"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/dimensions", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "dimensions"] }
+          }
+        },
+        {
+          "name": "Get registry (one direction)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients/{{clientId}}/dimensions?direction=OUTWARD",
+              "host": ["{{baseUrl}}"],
+              "path": ["clients", "{{clientId}}", "dimensions"],
+              "query": [{ "key": "direction", "value": "OUTWARD" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Limit Definitions",
+      "item": [
+        {
+          "name": "Create GLOBAL Per-Transaction limit (OUTWARD)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201 Created, effective', () => {", "  pm.response.to.have.status(201);", "  pm.expect(pm.response.json().data.effective).to.eql(true);", "});"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "content-type", "value": "application/json" },
+              { "key": "{{actorHeader}}", "value": "{{actor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"direction\": \"OUTWARD\",\n  \"dimensionCode\": \"GLOBAL\",\n  \"windowType\": \"PER_TXN\",\n  \"thresholdAmount\": 500000\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/limits", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "limits"] },
+            "description": "Mandatory: no client can be enforced for a direction without this (BRD §5). thresholdAmount is in minor units (paise) — 500000 = INR 5,000. PER_TXN is amount-only; thresholdCount is not applicable to it."
+          }
+        },
+        {
+          "name": "Create GLOBAL Per-Transaction limit (INWARD)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201 Created, not yet effective (INWARD not enabled)', () => {", "  pm.response.to.have.status(201);", "  const body = pm.response.json();", "  pm.expect(body.data.effective).to.eql(false);", "  pm.expect(body.warnings[0].code).to.eql('DIRECTION_NOT_ENABLED');", "});"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "content-type", "value": "application/json" },
+              { "key": "{{actorHeader}}", "value": "{{actor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"direction\": \"INWARD\",\n  \"dimensionCode\": \"GLOBAL\",\n  \"windowType\": \"PER_TXN\",\n  \"thresholdAmount\": 500000\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/limits", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "limits"] },
+            "description": "The response's data.effective is false with a DIRECTION_NOT_ENABLED warning until INWARD is turned on (see Transactions folder's \"Enable INWARD direction\") — stored now, enforced later, no code change needed."
+          }
+        },
+        {
+          "name": "Create UCIC daily limit (OUTWARD, tight — for the rejection example)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201 Created, captures limitId', () => {", "  pm.response.to.have.status(201);", "  const body = pm.response.json();", "  pm.expect(body.data._id).to.be.a('string');", "  pm.collectionVariables.set('limitId', body.data._id);", "});"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "content-type", "value": "application/json" },
+              { "key": "{{actorHeader}}", "value": "{{actor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"direction\": \"OUTWARD\",\n  \"dimensionCode\": \"UCIC\",\n  \"windowType\": \"DAILY_CALENDAR\",\n  \"thresholdAmount\": 150000,\n  \"thresholdCount\": 5\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/limits", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "limits"] },
+            "description": "Both thresholdAmount and thresholdCount may be set together — breaching either rejects. Deliberately tight (INR 1,500/day, 5 txns/day for one UCIC) so \"Submit OUTWARD transaction (over UCIC threshold, rejected)\" actually breaches it. This request's test script captures the new definition's _id into {{limitId}} for the requests below."
+          }
+        },
+        {
+          "name": "List limit definitions",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK, 3 definitions', () => {", "  pm.response.to.have.status(200);", "  pm.expect(pm.response.json().data.length).to.eql(3);", "});"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/limits", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "limits"] }
+          }
+        },
+        {
+          "name": "List limit definitions (filtered)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK, only the UCIC one', () => {", "  pm.response.to.have.status(200);", "  const data = pm.response.json().data;", "  pm.expect(data.length).to.eql(1);", "  pm.expect(data[0].dimensionCode).to.eql('UCIC');", "});"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients/{{clientId}}/limits?direction=OUTWARD&dimensionCode=UCIC&windowType=DAILY_CALENDAR",
+              "host": ["{{baseUrl}}"],
+              "path": ["clients", "{{clientId}}", "limits"],
+              "query": [
+                { "key": "direction", "value": "OUTWARD" },
+                { "key": "dimensionCode", "value": "UCIC" },
+                { "key": "windowType", "value": "DAILY_CALENDAR" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get limit definition by id",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/limits/{{limitId}}", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "limits", "{{limitId}}"] },
+            "description": "{{limitId}} is captured automatically by \"Create UCIC daily limit\"'s test script — run that first (it's earlier in this same folder)."
+          }
+        },
+        {
+          "name": "Update limit definition (threshold change)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK, threshold updated, version bumped', () => {", "  pm.response.to.have.status(200);", "  pm.expect(pm.response.json().data.thresholdAmount).to.eql(200000);", "});"] } }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "content-type", "value": "application/json" },
+              { "key": "{{actorHeader}}", "value": "{{actor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"thresholdAmount\": 200000\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/limits/{{limitId}}", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "limits", "{{limitId}}"] },
+            "description": "direction, dimensionCode, windowType and scope are immutable after creation — only thresholdAmount, thresholdCount, isActive, effectiveFrom, effectiveTo may change. Takes effect on the next transaction, no restart needed."
+          }
+        },
+        {
+          "name": "Create disposable limit (for the deactivate example below)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('201 Created, captures disposableLimitId', () => {", "  pm.response.to.have.status(201);", "  pm.collectionVariables.set('disposableLimitId', pm.response.json().data._id);", "});"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "content-type", "value": "application/json" },
+              { "key": "{{actorHeader}}", "value": "{{actor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"direction\": \"OUTWARD\",\n  \"dimensionCode\": \"UCIC_CHANNEL\",\n  \"windowType\": \"DAILY_CALENDAR\",\n  \"thresholdAmount\": 100000\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/limits", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "limits"] },
+            "description": "A separate, throwaway definition — kept out of the {{limitId}} used above so deactivating it here doesn't disturb the UCIC rejection example elsewhere in this collection."
+          }
+        },
+        {
+          "name": "Deactivate limit definition",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK, isActive false', () => {", "  pm.response.to.have.status(200);", "  pm.expect(pm.response.json().data.isActive).to.eql(false);", "});"] } }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "{{actorHeader}}", "value": "{{actor}}" }],
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/limits/{{disposableLimitId}}", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "limits", "{{disposableLimitId}}"] },
+            "description": "Soft-deactivate (isActive: false) — definitionVersion history and the audit trail stay intact, nothing is deleted."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "Submit OUTWARD transaction (approved)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK, APPROVED', () => {", "  pm.response.to.have.status(200);", "  pm.expect(pm.response.json().data.status).to.eql('APPROVED');", "});"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "content-type", "value": "application/json" },
+              { "key": "{{actorHeader}}", "value": "{{actor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"direction\": \"OUTWARD\",\n  \"transactionId\": \"{{outwardTransactionId}}\",\n  \"amount\": 25000,\n  \"ucic\": \"UCIC0001\",\n  \"channel\": \"MOBILE\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/transactions", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "transactions"] },
+            "description": "direction is required and NEVER defaulted. amount is in minor units (paise) — 25000 = INR 250. Attribute fields (ucic, channel, accountNumber, mcc) are only meaningful if the registry's dimensions declare them; extra/unknown fields are ignored. Re-posting the identical (clientId, direction, transactionId) is idempotent — returns the original stored decision, doesn't re-run the waterfall."
+          }
+        },
+        {
+          "name": "Submit OUTWARD transaction (over UCIC threshold, rejected)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK, REJECTED, names the breached dimension', () => {", "  pm.response.to.have.status(200);", "  const data = pm.response.json().data;", "  pm.expect(data.status).to.eql('REJECTED');", "  pm.expect(data.rejection.dimensionCode).to.eql('UCIC');", "});"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "content-type", "value": "application/json" },
+              { "key": "{{actorHeader}}", "value": "{{actor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"direction\": \"OUTWARD\",\n  \"transactionId\": \"PM-OUT-REJECT-1\",\n  \"amount\": 250000,\n  \"ucic\": \"UCIC0001\",\n  \"channel\": \"MOBILE\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/transactions", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "transactions"] },
+            "description": "Same UCIC as the approved example above — this amount (INR 2,500) exceeds the UCIC daily limit no matter which point in this collection's run you're at: its original INR 1,500 threshold, or INR 2,000 after \"Update limit definition (threshold change)\" runs earlier in the Limit Definitions folder. Still returns HTTP 200 with data.status = \"REJECTED\" and a data.rejection object naming the breached dimension/window/threshold — a rejection is a valid, successful response, not an error status."
+          }
+        },
+        {
+          "name": "Get OUTWARD transaction status",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK, APPROVED', () => {", "  pm.response.to.have.status(200);", "  pm.expect(pm.response.json().data.status).to.eql('APPROVED');", "});"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients/{{clientId}}/transactions/{{outwardTransactionId}}?direction=OUTWARD",
+              "host": ["{{baseUrl}}"],
+              "path": ["clients", "{{clientId}}", "transactions", "{{outwardTransactionId}}"],
+              "query": [{ "key": "direction", "value": "OUTWARD" }]
+            },
+            "description": "direction as a query param names which direction's record to look up (an outward and an inward transaction can share the identical Transaction ID as fully independent records). Omitting it defaults to OUTWARD during this single-direction-adoption period only — pass it explicitly once INWARD is in real use."
+          }
+        },
+        {
+          "name": "Reverse OUTWARD transaction",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK, REVERSED', () => {", "  pm.response.to.have.status(200);", "  pm.expect(pm.response.json().data.status).to.eql('REVERSED');", "});"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "content-type", "value": "application/json" },
+              { "key": "{{actorHeader}}", "value": "{{actor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"direction\": \"OUTWARD\",\n  \"reason\": \"Customer-requested reversal (Postman manual test)\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/transactions/{{outwardTransactionId}}/reversal", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "transactions", "{{outwardTransactionId}}", "reversal"] },
+            "description": "Only an APPROVED transaction can be reversed (409 TRANSACTION_NOT_REVERSIBLE otherwise). Reversing it twice is a no-op the second time, not an error. Decrements exactly the counters this transaction's own applied-counter-keys record, in reverse order."
+          }
+        },
+        {
+          "name": "Enable INWARD direction",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK, both directions enabled', () => {", "  pm.response.to.have.status(200);", "  pm.expect(pm.response.json().data.client.enabledDirections.sort()).to.eql(['INWARD', 'OUTWARD']);", "});"] } }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "content-type", "value": "application/json" },
+              { "key": "{{actorHeader}}", "value": "{{actor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabledDirections\": [\"OUTWARD\", \"INWARD\"]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/directions", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "directions"] },
+            "description": "Guarded: fails with DIRECTION_REGISTRY_INCOMPLETE or DIRECTION_GLOBAL_PER_TXN_MISSING unless INWARD already has a valid registry (with GLOBAL) and an active mandatory GLOBAL Per-Transaction limit — both already set up earlier in this collection run (Dimension Registry and Limit Definitions folders)."
+          }
+        },
+        {
+          "name": "Submit INWARD transaction (approved, after enabling INWARD)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('200 OK, APPROVED — the same policy created earlier is enforced immediately, no code change', () => {", "  pm.response.to.have.status(200);", "  pm.expect(pm.response.json().data.status).to.eql('APPROVED');", "});"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "content-type", "value": "application/json" },
+              { "key": "{{actorHeader}}", "value": "{{actor}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"direction\": \"INWARD\",\n  \"transactionId\": \"{{inwardTransactionId}}\",\n  \"amount\": 30000\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clients/{{clientId}}/transactions", "host": ["{{baseUrl}}"], "path": ["clients", "{{clientId}}", "transactions"] },
+            "description": "Note {{inwardTransactionId}} can equal {{outwardTransactionId}} in value and still be a fully independent record; kept distinct here only for a clearer walkthrough."
+          }
+        }
+      ]
+    }
+  ]
+}
